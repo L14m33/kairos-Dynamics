@@ -113,16 +113,24 @@ function dobleSerial(duracionS) {
 
   // Durante el silencio de B (120–150 s) debe verse «Nodo B sin datos hace N s».
   const esperar = async (s) => { await pagina.waitForTimeout(s * 1000); };
+  // A los ~46 s la consola (últimas 50 líneas) todavía tiene el −127 y el 85.0 con ok:true.
+  await esperar(46 - 2.1);
+  await pagina.click('a[data-ruta="dispositivos"]');
+  await pagina.waitForTimeout(400);
+  const consolaTemprana = await texto('#consola');
+  comprobar('−127 con ok:true rechazado (segunda defensa)', consolaTemprana.includes('rechazada: −127 con ok:true'), 'consola a los 46 s');
+  comprobar('85.0 con ok:true rechazado (segunda defensa)', consolaTemprana.includes('rechazada: 85.0 con ok:true'), 'consola a los 46 s');
+  await pagina.click('a[data-ruta="resumen"]');
   let mensajeSilencio = '';
   if (DURACION_S >= 150) {
-    await esperar(148.5 - 2.1);
+    await esperar(148.5 - 46 - 0.6);
     mensajeSilencio = await pagina.$eval('#resumen-tarjetas article:nth-child(2) .causas', (e) => e.textContent);
     const recoSilencio = await pagina.$eval('.reco .reco-titulo', (e) => e.textContent);
     comprobar('Tarjeta B: «Nodo B sin datos hace N s» (N ≈ 30)', /Nodo B sin datos hace (2\d|3\d) s/.test(mensajeSilencio), mensajeSilencio);
     comprobar('Recomendación: NO SE PUEDE COMPARAR durante el silencio', recoSilencio === 'NO SE PUEDE COMPARAR', recoSilencio);
     await esperar(DURACION_S - 148.5 + 3);
   } else {
-    await esperar(DURACION_S + 3);
+    await esperar(Math.max(0, DURACION_S - 46) + 3);
   }
 
   await pagina.click('a[data-ruta="dispositivos"]');
@@ -139,9 +147,6 @@ function dobleSerial(duracionS) {
   comprobar('Intervalo observado medido ≈ 5 s', /^[45]\.\d s$/.test(A['Intervalo observado']), A['Intervalo observado']);
   comprobar('ID de sonda leído del serial', A['ID de sonda'] === '28FF641E8D3C0A12', A['ID de sonda']);
   comprobar('RSSI de B', /−?-?58 dBm/.test(B['Vía · RSSI']), B['Vía · RSSI']);
-  const consola = await texto('#consola');
-  comprobar('−127 con ok:true rechazado (segunda defensa)', consola.includes('rechazada: −127 con ok:true'), 'consola');
-  comprobar('85.0 con ok:true rechazado (segunda defensa)', consola.includes('rechazada: 85.0 con ok:true'), 'consola');
 
   await pagina.click('a[data-ruta="alertas"]').catch(() => {});
   const eventos = await pagina.evaluate(() => Array.from(document.querySelectorAll('#tabla-eventos tbody tr')).map((tr) => tr.textContent));

@@ -117,6 +117,7 @@ a { color: var(--cyan); }
 .chip-conexion .btn { min-height: 36px; padding: 0 12px; border-radius: 14px; }
 .chip-conexion .texto-chip { padding-right: 6px; }
 .relleno { flex: 1; }
+.meta { font-size: .875rem; color: var(--ink-dim); }
 
 .lateral {
   position: sticky; top: 57px; align-self: start; height: calc(100vh - 57px);
@@ -346,8 +347,9 @@ dialog h2 { margin: 0 0 8px; font-size: 1.25rem; }
 .equipo { list-style: none; padding: 0; margin: 16px 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 24px; font-size: 1.0625rem; }
 .cierre { text-align: center; }
 .pie-inicio { border-top: 1px solid var(--border); padding: 24px 20px; text-align: center; color: var(--ink-dim); font-size: .875rem; }
-.entrada { opacity: 0; transform: translateY(8px); transition: opacity 500ms var(--curva), transform 500ms var(--curva); }
-.entrada.visible { opacity: 1; transform: none; }
+/* Visible por defecto; solo se oculta (para entrar una vez) lo que está debajo de la primera pantalla. */
+.entrada { transition: opacity 500ms var(--curva), transform 500ms var(--curva); }
+.entrada.oculta { opacity: 0; transform: translateY(8px); }
 
 /* =====================================================================
    MODO PRESENTACIÓN Y RESPONSIVO
@@ -355,6 +357,11 @@ dialog h2 { margin: 0 0 8px; font-size: 1.25rem; }
 html.presentacion .tablero { grid-template-columns: minmax(0, 1fr); }
 html.presentacion .lateral { display: none; }
 html.presentacion .principal { padding: 12px 20px 20px; }
+/* La barra superior no crece en presentación: así no se parte en dos filas. */
+html.presentacion .barra-sup .marca { font-size: 18px; }
+html.presentacion .barra-sup .segmentado button { font-size: 13px; }
+html.presentacion .barra-sup .insignia { font-size: 12px; }
+html.presentacion .barra-sup .chip-conexion, html.presentacion .barra-sup .btn { font-size: 14px; }
 
 @media (max-width: 1180px) {
   .reco { grid-template-columns: minmax(0, 1fr); }
@@ -376,7 +383,7 @@ html.presentacion .principal { padding: 12px 20px 20px; }
   .reco h2 { font-size: 2rem; }
   .hero h1 { font-size: 2.5rem; }
   .seccion { padding: 40px 16px; }
-  .barra-sup { padding: 6px 16px; }
+  .barra-sup { padding: 6px 16px; position: static; }
 }
 @media (max-width: 480px) {
   .segmentado button { padding: 0 10px; font-size: .75rem; }
@@ -384,7 +391,7 @@ html.presentacion .principal { padding: 12px 20px 20px; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
-  .entrada { opacity: 1; transform: none; }
+  .entrada.oculta { opacity: 1; transform: none; }
 }
 
 /* =====================================================================
@@ -392,11 +399,14 @@ html.presentacion .principal { padding: 12px 20px 20px; }
    ===================================================================== */
 @media print {
   body { background: #fff; color: #000; }
-  .barra-sup, .lateral, .saltar, .no-imprimir, #vista-inicio, .vista:not(#vista-reportes) { display: none !important; }
+  body > *:not(#tablero), .barra-sup, .lateral, .vista, .aviso-almacen, .saltar { display: none !important; }
   .tablero { display: block; }
-  .panel { background: #fff; border-color: #999; box-shadow: none; color: #000; }
-  .atenuado, th, .titulo-panel { color: #333; }
-  #imprimible { display: block !important; }
+  .principal { padding: 0; }
+  #imprimible { display: block !important; color: #000; font-size: 11pt; }
+  #imprimible table { border: 1px solid #999; margin: 8px 0 16px; }
+  #imprimible th, #imprimible td { color: #000; border-bottom: 1px solid #ccc; }
+  #imprimible h1 { font-size: 16pt; margin: 0 0 4px; }
+  #imprimible h2 { font-size: 13pt; margin: 14px 0 4px; }
 }
 </style>
 </head>
@@ -407,9 +417,93 @@ html.presentacion .principal { padding: 12px 20px 20px; }
      PÁGINA INSTITUCIONAL (#/)
      ===================================================================== -->
 <div id="vista-inicio" hidden>
-<!--INICIO-->
-  <main id="main-inicio" class="seccion" tabindex="-1"><h1 tabindex="-1">KAIROS DYNAMICS</h1><p><a class="btn primario" href="#/dashboard">Ver Dashboard</a></p></main>
-<!--/INICIO-->
+<header class="inicio-nav">
+    <a class="marca" href="#/" data-desplazar="inicio-hero"><span class="k">KAIROS</span> <span class="d">DYNAMICS</span></a>
+    <span class="relleno"></span>
+    <nav aria-label="Secciones de la página">
+      <a class="enlace" href="#/" data-desplazar="inicio-hero">Inicio</a>
+      <a class="enlace" href="#/" data-desplazar="como-funciona">Cómo funciona</a>
+      <a class="enlace" href="#/" data-desplazar="tecnologia">Tecnología</a>
+    </nav>
+    <a class="btn primario" href="#/dashboard">Ver Dashboard</a>
+  </header>
+  <main class="inicio" id="main-inicio" tabindex="-1">
+    <section class="seccion hero" id="inicio-hero" aria-labelledby="h-inicio">
+      <div>
+        <h1 id="h-inicio" tabindex="-1">Cada <span class="grado">grado</span> importa.</h1>
+        <p class="sub">Monitoreo inteligente de temperatura para el transporte refrigerado de fresa</p>
+        <div class="acciones">
+          <a class="btn primario" href="#/dashboard">Probar la plataforma</a>
+          <a class="btn" href="#/" data-desplazar="como-funciona">Cómo funciona</a>
+        </div>
+      </div>
+      <div class="mini" role="img" aria-label="Vista previa del tablero en demostración, con datos simulados">
+        <span class="insignia">Demostración · datos simulados</span>
+        <div class="mini-marco" aria-hidden="true">
+          <div class="tarjetas" id="mini-tarjetas"></div>
+          <div id="mini-reco"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="seccion entrada" id="problema" aria-labelledby="h-problema">
+      <p class="mayus atenuado">El problema</p>
+      <h2 id="h-problema">Una alarma solo ve el presente</h2>
+      <p class="texto">Durante el transporte, la fresa se desgasta con el tiempo y con la temperatura. Un termómetro o una alarma de umbral dicen cómo está la carga en este momento, pero no cuánto desgaste acumuló antes.</p>
+    </section>
+
+    <section class="seccion entrada" id="como-funciona" aria-labelledby="h-solucion">
+      <p class="mayus atenuado">Nuestra solución</p>
+      <h2 id="h-solucion" tabindex="-1">Registrar paso a paso, comparar y decidir</h2>
+      <p class="texto">KAIROS DYNAMICS registra la temperatura de cada carga, suma el efecto acumulado con una ecuación sencilla (Q10) y sugiere cuál conviene entregar primero.</p>
+      <div class="pasos">
+        <article class="panel paso">
+          <div class="numero">1</div>
+          <svg class="icono" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 13.5V4a2 2 0 1 1 4 0v9.5a4 4 0 1 1-4 0z"/><path d="M12 9v6"/></svg>
+          <h3>MEDIR</h3>
+          <p>Una sonda sumergible dentro de cada carga mide la temperatura.</p>
+        </article>
+        <article class="panel paso">
+          <div class="numero">2</div>
+          <svg class="icono" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17l5-6 4 4 8-9"/><path d="M3 21h18"/></svg>
+          <h3>SUPERVISAR</h3>
+          <p>Las lecturas y el historial se guardan en la propia computadora, sin internet.</p>
+        </article>
+        <article class="panel paso">
+          <div class="numero">3</div>
+          <svg class="icono" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h11v10H3z"/><path d="M14 10h4l3 3v4h-7"/><circle cx="7" cy="18" r="1.8"/><circle cx="17" cy="18" r="1.8"/></svg>
+          <h3>ACTUAR</h3>
+          <p>El sistema sugiere qué carga entregar primero.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="seccion entrada" id="tecnologia" aria-labelledby="h-tecnologia">
+      <h2 id="h-tecnologia" tabindex="-1">Tecnología</h2>
+      <div class="tecnologias">
+        <article class="panel tec"><svg class="icono" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 13.5V4a2 2 0 1 1 4 0v9.5a4 4 0 1 1-4 0z"/></svg><p>Sondas DS18B20 sumergibles, de acero inoxidable. Exactitud nominal de ±0.5 °C entre −10 y +85 °C.</p></article>
+        <article class="panel tec"><svg class="icono" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2"/><path d="M9 9h6v6H9z"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/></svg><p>Dos placas ESP-32D, una por carga. La placa B envía su lectura a la A por ESP-NOW, sin Wi-Fi ni internet.</p></article>
+        <article class="panel tec"><svg class="icono" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg><p>Conexión USB a la computadora y una página local que abre con doble clic, sin servidores.</p></article>
+        <article class="panel tec"><svg class="icono" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19c4 0 5-14 9-14"/><path d="M13 5c3 0 4 6 7 6"/><path d="M3 21h18"/></svg><p>Modelo Q10: ecuación de desgaste acumulado con parámetros provisionales.</p></article>
+      </div>
+    </section>
+
+    <section class="seccion entrada" id="alcance" aria-labelledby="h-alcance">
+      <h2 id="h-alcance">Alcance y límites</h2>
+      <div class="panel limites-caja"><p class="texto" style="color: var(--ink)">Esto es un prototipo educativo. La estimación de vida útil usa parámetros provisionales que aún no tienen validación experimental. No certifica la inocuidad ni la calidad del producto. Los datos de demostración son simulados.</p></div>
+    </section>
+
+    <section class="seccion cierre entrada">
+      <a class="btn primario" href="#/dashboard" style="min-height: 52px; font-size: 1rem; padding: 0 24px">Probar la plataforma</a>
+    </section>
+  </main>
+  <footer class="pie-inicio" aria-labelledby="h-equipo">
+    <h2 id="h-equipo" class="mayus" style="margin: 0 0 8px">Equipo y evento</h2>
+    <ul class="equipo" id="lista-equipo" style="max-width: 640px; margin: 0 auto 12px; text-align: left"></ul>
+    <p id="linea-evento" style="margin: 0 0 4px"></p>
+    <p id="registro-evento" hidden style="margin: 0 0 4px"></p>
+    <p id="version-inicio" style="margin: 0"></p>
+  </footer>
 </div>
 
 <!-- =====================================================================
@@ -492,6 +586,118 @@ html.presentacion .principal { padding: 12px 20px 20px; }
     </section>
 
     <!--VISTAS-->
+    <!-- ===================== CARGAS ===================== -->
+    <section class="vista" id="vista-cargas" aria-labelledby="h-cargas" hidden>
+      <div class="fila-titulo"><h1 id="h-cargas" tabindex="-1">Cargas</h1><span class="meta" id="cargas-meta"></span></div>
+      <div class="rejilla-2" style="margin-top: 0">
+        <section class="panel" id="carga-panel-A" aria-labelledby="h-carga-A"></section>
+        <section class="panel" id="carga-panel-B" aria-labelledby="h-carga-B"></section>
+      </div>
+    </section>
+
+    <!-- ===================== TEMPERATURA ===================== -->
+    <section class="vista" id="vista-temperatura" aria-labelledby="h-temperatura" hidden>
+      <div class="fila-titulo"><h1 id="h-temperatura" tabindex="-1">Temperatura</h1><span class="meta" id="temp-meta"></span></div>
+      <section class="panel" aria-label="Gráfica de temperatura">
+        <div class="controles-grafica">
+          <div class="grupo-botones" role="group" aria-label="Carga que se grafica">
+            <button type="button" data-carga="A" aria-pressed="false">Carga A</button>
+            <button type="button" data-carga="B" aria-pressed="false">Carga B</button>
+            <button type="button" data-carga="AB" aria-pressed="true">A + B</button>
+          </div>
+          <div class="grupo-botones" role="group" aria-label="Ventana de tiempo">
+            <button type="button" data-ventana="1" aria-pressed="false">Última hora</button>
+            <button type="button" data-ventana="5" aria-pressed="false">5 horas</button>
+            <button type="button" data-ventana="24" aria-pressed="false">24 horas</button>
+            <button type="button" data-ventana="0" aria-pressed="true">Todo</button>
+          </div>
+          <span class="meta" id="nota-ventana"></span>
+          <span class="relleno"></span>
+          <button type="button" class="btn" id="btn-tabla" aria-pressed="false">Ver como tabla</button>
+        </div>
+        <div id="grafica-temp"></div>
+        <div id="tabla-temp" class="tabla-caja" hidden>
+          <table>
+            <caption class="solo-lector">Lecturas de temperatura (diezmadas a la gráfica)</caption>
+            <thead><tr><th scope="col">Hora</th><th scope="col">Carga A (°C)</th><th scope="col">Carga B (°C)</th></tr></thead>
+            <tbody id="tabla-temp-cuerpo"></tbody>
+          </table>
+        </div>
+        <p class="meta" style="margin: 8px 0 0">Carga A: línea continua turquesa. Carga B: línea discontinua clara. Banda sombreada: rango aceptable. Círculos rojos con borde: lecturas fuera de rango. Pase el mouse o toque la gráfica para ver cada valor.</p>
+      </section>
+      <div class="rejilla-2">
+        <section class="panel" aria-labelledby="h-limites">
+          <h2 class="titulo-panel" id="h-limites">Límites de temperatura</h2>
+          <div class="campos">
+            <div class="campo"><label for="lim-min">Mínimo (°C)</label><input id="lim-min" type="number" step="0.5" min="-10" max="40" inputmode="decimal"></div>
+            <div class="campo"><label for="lim-max">Máximo (°C)</label><input id="lim-max" type="number" step="0.5" min="-10" max="40" inputmode="decimal"></div>
+          </div>
+          <div class="error-campo" id="lim-error" role="alert"></div>
+          <p class="meta" style="margin: 4px 0 0">Entre −10 y 40 °C, con el mínimo menor que el máximo. Se aplican de inmediato a la banda, los marcadores, los avisos y los eventos nuevos; los eventos pasados conservan su límite.</p>
+        </section>
+        <section class="panel" aria-labelledby="h-params">
+          <h2 class="titulo-panel" id="h-params">Parámetros del modelo (provisionales)</h2>
+          <div class="campos">
+            <div class="campo"><label for="par-q10">Q10</label><input id="par-q10" type="number" step="0.1" min="1" max="5" inputmode="decimal"></div>
+            <div class="campo"><label for="par-tref">Tref (°C)</label><input id="par-tref" type="number" step="0.5" min="-10" max="40" inputmode="decimal"></div>
+            <div class="campo"><label for="par-lref">Lref (h)</label><input id="par-lref" type="number" step="1" min="1" max="1000" inputmode="decimal"></div>
+            <div class="campo"><label for="par-e0a">E0 carga A (h)</label><input id="par-e0a" type="number" step="0.1" min="0" inputmode="decimal"></div>
+            <div class="campo"><label for="par-e0b">E0 carga B (h)</label><input id="par-e0b" type="number" step="0.1" min="0" inputmode="decimal"></div>
+          </div>
+          <div class="error-campo" id="par-error" role="alert"></div>
+          <div class="controles-grafica"><button type="button" class="btn" id="btn-par-defecto">Volver a los valores por defecto</button></div>
+          <p class="meta" style="margin: 4px 0 0">Parámetros provisionales, sin validación experimental. Al cambiarlos se recalcula el historial con los mismos tramos medidos.</p>
+        </section>
+      </div>
+    </section>
+
+    <!-- ===================== ALERTAS ===================== -->
+    <section class="vista" id="vista-alertas" aria-labelledby="h-alertas" hidden>
+      <div class="fila-titulo"><h1 id="h-alertas" tabindex="-1">Alertas y eventos</h1><span class="meta" id="alertas-meta"></span></div>
+      <section class="panel">
+        <div class="controles-grafica">
+          <label class="meta" for="filtro-carga">Carga</label>
+          <select class="btn" id="filtro-carga"><option value="">Todas</option><option value="A">Carga A</option><option value="B">Carga B</option></select>
+          <label class="meta" for="filtro-tipo">Tipo</label>
+          <select class="btn" id="filtro-tipo"><option value="">Todos los tipos</option></select>
+        </div>
+        <div class="tabla-caja">
+          <table id="tabla-eventos">
+            <caption class="solo-lector">Registro de eventos, el más reciente arriba</caption>
+            <thead><tr><th scope="col">Hora</th><th scope="col">Tipo</th><th scope="col">Carga</th><th scope="col">Evento</th><th scope="col">Valor</th><th scope="col">Recomendación</th><th scope="col">Estado</th><th scope="col">Límite vigente</th></tr></thead>
+            <tbody id="tabla-eventos-cuerpo"></tbody>
+          </table>
+        </div>
+        <p class="vacio" id="alertas-vacio">Sin eventos todavía.</p>
+      </section>
+    </section>
+
+    <!-- ===================== REPORTES ===================== -->
+    <section class="vista" id="vista-reportes" aria-labelledby="h-reportes" hidden>
+      <div class="fila-titulo"><h1 id="h-reportes" tabindex="-1">Reportes</h1><span class="meta" id="reportes-meta"></span></div>
+      <div class="rejilla-2" style="margin-top: 0">
+        <section class="panel" aria-labelledby="h-descargas">
+          <h2 class="titulo-panel" id="h-descargas">Descargas</h2>
+          <p class="atenuado" style="margin: 0 0 12px">CSV en UTF-8 con BOM (se abre con acentos en Excel), coma como separador, punto decimal y fechas ISO 8601. La columna <code>origen</code> va en cada fila: un CSV de datos simulados no demuestra auditabilidad.</p>
+          <div class="controles-grafica">
+            <button type="button" class="btn primario" id="btn-csv-muestras">Descargar muestras (CSV)</button>
+            <button type="button" class="btn" id="btn-csv-eventos">Descargar eventos (CSV)</button>
+            <button type="button" class="btn" id="btn-json-meta">Descargar metadatos (JSON)</button>
+          </div>
+          <p class="meta" id="descarga-estado" aria-live="polite"></p>
+        </section>
+        <section class="panel" aria-labelledby="h-imprimir">
+          <h2 class="titulo-panel" id="h-imprimir">Resumen imprimible</h2>
+          <p class="atenuado" style="margin: 0 0 12px">Una hoja por sesión con el estado de cada carga, la recomendación y los parámetros usados.</p>
+          <button type="button" class="btn" id="btn-imprimir">Imprimir resumen por carga</button>
+        </section>
+        <section class="panel" aria-labelledby="h-almacen">
+          <h2 class="titulo-panel" id="h-almacen">Datos guardados en esta computadora</h2>
+          <p class="atenuado" id="almacen-estado" style="margin: 0 0 12px"></p>
+          <button type="button" class="btn" id="btn-borrar">Borrar datos locales</button>
+        </section>
+      </div>
+    </section>
     <!-- ===================== DISPOSITIVOS ===================== -->
     <section class="vista" id="vista-dispositivos" aria-labelledby="h-dispositivos" hidden>
       <div class="fila-titulo"><h1 id="h-dispositivos" tabindex="-1">Dispositivos</h1><span class="meta">Diagnóstico de nodos y conexión. Lo que llega por el puerto se muestra como texto, nunca como HTML.</span></div>
@@ -532,6 +738,7 @@ html.presentacion .principal { padding: 12px 20px 20px; }
         </details>
       </section>
     </section>
+    <section id="imprimible" hidden aria-hidden="true"></section>
   </main>
 </div>
 
@@ -1535,9 +1742,175 @@ const almacen = (function () {
     }
   };
 })();
-/*ALMACEN-EXTRA*/
-function cargarSesionReal() { return null; }      // Etapa 4: persistencia
-function guardarSesionReal() { /* Etapa 4 */ }
+// ---------- Persistencia del registro REAL (nunca de la demostración) ----------
+const CAMPOS_CANAL = ['sensor', 'fw', 'placa', 'lecturas', 'perdidos', 'reinicios', 'ultimaSeq', 'ultimoUp', 'ultimaLecturaH',
+  'ultimaLecturaMarca', 'rssi', 'via', 'e0H', 'eH', 'eFueraBufferH', 'lagunaH', 'fueraH', 'excursiones', 'ultimaValida',
+  'ultimoEstadoTermico', 'fueraSeguidas', 'dentroSeguidas', 'enExcursion', 'causaExcursion', 'fallasSeguidas', 'ultimoErr',
+  'fallaActiva', 'nivelVida', 'agotada', 'tMin', 'tMax', 'tSuma', 'tN'];
+const REF_EVENTOS = ['eventoExcursion', 'eventoFalla', 'eventoNivel', 'eventoSilencio'];
+let ultimoGuardado = 0;
+let errorGuardado = false;
+
+function redondear(x, d) { return typeof x === 'number' && Number.isFinite(x) ? Math.round(x * Math.pow(10, d)) / Math.pow(10, d) : x; }
+
+// Muestra compacta: [tH, marca, tC, ok, err, dtH, tPrevC, laguna, vida, eH, sensor, seq]
+function compactarMuestra(x, sensorCanal) {
+  return [redondear(x.tH, 7), x.marca, x.tC, x.ok ? 1 : 0, x.err, redondear(x.dtH, 7), x.tPrevC, x.laguna ? 1 : 0,
+    redondear(x.vida, 4), redondear(x.eH, 6), x.sensor === sensorCanal ? 0 : x.sensor, x.seq];
+}
+function expandirMuestra(a, sensorCanal) {
+  return { tH: a[0], marca: a[1], tC: a[2], ok: a[3] === 1, err: a[4], dtH: a[5], tPrevC: a[6], laguna: a[7] === 1,
+    vida: a[8], eH: a[9], sensor: a[10] === 0 ? sensorCanal : a[10], seq: a[11] };
+}
+
+// forzar = true guarda ya; si no, como máximo cada 5 s.
+function guardarSesionReal(forzar) {
+  const m = app.monitorReal;
+  if (!m || !almacen.disponible) return;
+  if (!forzar && performance.now() - ultimoGuardado < 5000) return;
+  ultimoGuardado = performance.now();
+  function armar(maxMuestras) {
+    const datos = { version: 1, marcaGuardado: Date.now(), baseH: ahoraRealH(), inicioMarca: m.inicioMarca,
+      params: m.params, limites: m.limites, siguienteId: m.siguienteId, eventos: m.eventos, canales: {}, ei: {}, muestras: {} };
+    ['A', 'B'].forEach(function (id) {
+      const c = m.canales[id];
+      const cc = {};
+      CAMPOS_CANAL.forEach(function (k) { cc[k] = c[k]; });
+      REF_EVENTOS.forEach(function (k) { cc[k] = c[k] ? c[k].id : null; });
+      datos.canales[id] = cc;
+      datos.ei[id] = c.ei;
+      const todas = c.muestras.aArreglo();
+      datos.muestras[id] = todas.slice(-maxMuestras).map(function (x) { return compactarMuestra(x, c.sensor); });
+    });
+    return datos;
+  }
+  errorGuardado = !almacen.guardar('real', armar(CONFIG.MAX_MUESTRAS_GUARDADAS)) && !almacen.guardar('real', armar(1000));
+}
+
+function cargarSesionReal() {
+  const d = almacen.leer('real');
+  if (!d || d.version !== 1 || !d.canales || !d.muestras) return null;
+  try {
+    // El tiempo que la página estuvo cerrada cuenta: el siguiente tramo será una laguna.
+    app.relojReal = { origenPerf: performance.now(), baseH: (d.baseH || 0) + Math.max(0, Date.now() - d.marcaGuardado) / 3600000 };
+    const m = crearMonitor({ modo: 'real', params: d.params || parametrosPorDefecto(), limites: d.limites || { minC: CONFIG.LIMITE_MIN_C, maxC: CONFIG.LIMITE_MAX_C },
+      e0H: { A: 0, B: 0 }, umbralOpc: UMBRAL_REAL });
+    m.inicioMarca = d.inicioMarca === undefined ? null : d.inicioMarca;
+    m.eventos = Array.isArray(d.eventos) ? d.eventos.slice(-CONFIG.MAX_EVENTOS) : [];
+    m.siguienteId = d.siguienteId || (m.eventos.length + 1);
+    const porId = {};
+    m.eventos.forEach(function (ev) { porId[ev.id] = ev; });
+    ['A', 'B'].forEach(function (id) {
+      const c = m.canales[id], cc = d.canales[id] || {};
+      CAMPOS_CANAL.forEach(function (k) { if (cc[k] !== undefined) c[k] = cc[k]; });
+      if (c.tMin === null) c.tMin = Infinity;
+      if (c.tMax === null) c.tMax = -Infinity;
+      REF_EVENTOS.forEach(function (k) { c[k] = cc[k] ? (porId[cc[k]] || null) : null; });
+      c.silencioActivo = false;
+      if (c.eventoSilencio) { cerrarEvento(c.eventoSilencio); c.eventoSilencio = null; }
+      if (d.ei && d.ei[id]) c.ei = { ultimaT: d.ei[id].ultimaT, ultimaValida: d.ei[id].ultimaValida, intervalos: Array.isArray(d.ei[id].intervalos) ? d.ei[id].intervalos : [] };
+      (d.muestras[id] || []).forEach(function (a) { c.muestras.push(expandirMuestra(a, c.sensor)); });
+    });
+    m.version += 1;
+    return m;
+  } catch (e) {
+    return null;   // datos dañados: se empieza un registro nuevo
+  }
+}
+
+// ---------- Exportación ----------
+function descargar(nombre, contenido, tipo) {
+  const blob = new Blob([contenido], { type: tipo });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = nombre;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
+}
+
+function sello() {
+  const d = new Date();
+  const p = function (n) { return String(n).padStart(2, '0'); };
+  return d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + '_' + p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds());
+}
+
+// ISO 8601 con la zona horaria local, por ejemplo 2026-11-27T10:15:00-06:00.
+function isoLocal(marca) {
+  if (typeof marca !== 'number') return '';
+  const d = new Date(marca);
+  const p = function (n) { return String(Math.abs(n)).padStart(2, '0'); };
+  const off = -d.getTimezoneOffset();
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + 'T' + p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds()) +
+    (off >= 0 ? '+' : '-') + p(Math.trunc(off / 60)) + ':' + p(off % 60);
+}
+
+function campoCSV(v) {
+  const t = v === null || v === undefined ? '' : String(v);
+  return /[",\r\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t;
+}
+function filaCSV(valores) { return valores.map(campoCSV).join(','); }
+
+function nombreOrigen() {
+  const o = tipoOrigen();
+  return o === 'demo' ? 'simulado' : (o === 'archivo' ? 'archivo' : 'real');
+}
+
+function csvMuestras(m) {
+  const origen = nombreOrigen();
+  const columnas = ['origen', 'escenario', 'carga', 'nodo', 'sensor_id', 't_c', 'ok', 'marca_tiempo', 't_sim_h', 'vida_pct', 'horas_equiv_consumidas'];
+  if (origen === 'archivo') columnas.push('t_archivo_h');
+  const filas = [];
+  ['A', 'B'].forEach(function (id) {
+    const c = m.canales[id];
+    c.muestras.forEach(function (x) {
+      const f = [origen, origen === 'simulado' && m.escenario ? m.escenario.nombre : '', app.nombres[id], id, x.sensor || '',
+        x.ok && typeof x.tC === 'number' ? x.tC.toFixed(2) : '', x.ok ? 'true' : 'false',
+        origen === 'real' ? isoLocal(x.marca) : '', origen === 'simulado' ? x.tH.toFixed(2) : '',
+        typeof x.vida === 'number' ? x.vida.toFixed(2) : '', (c.e0H + x.eH).toFixed(3)];
+      if (origen === 'archivo') f.push(x.tH.toFixed(5));
+      filas.push({ t: x.tH, id: id, texto: filaCSV(f) });
+    });
+  });
+  filas.sort(function (a, b) { return a.t - b.t || (a.id < b.id ? -1 : 1); });
+  return { texto: '﻿' + filaCSV(columnas) + '\r\n' + filas.map(function (f) { return f.texto; }).join('\r\n') + (filas.length ? '\r\n' : ''), filas: filas.length };
+}
+
+function csvEventos(m) {
+  const origen = nombreOrigen();
+  const columnas = ['origen', 'hora', 't_sim_h', 'tipo', 'carga', 'evento', 'valor', 'recomendacion', 'estado', 'limite_vigente'];
+  const filas = m.eventos.map(function (ev) {
+    return filaCSV([origen, origen === 'real' ? isoLocal(ev.marca) : formatoT(ev.tH, origen === 'archivo'), origen === 'simulado' ? ev.tH.toFixed(2) : '',
+      ev.tipo, ev.carga, ev.texto, ev.valor, ev.recomendacion, ev.estado, ev.limite]);
+  });
+  return '﻿' + filaCSV(columnas) + '\r\n' + filas.join('\r\n') + (filas.length ? '\r\n' : '');
+}
+
+function metadatos(m) {
+  const tr = app.transporte;
+  return {
+    pagina: 'KAIROS DYNAMICS', version: CONFIG.VERSION, compilado: CONFIG.COMPILADO, generado: isoLocal(Date.now()),
+    origen: nombreOrigen(), escenario: m.escenario ? m.escenario.nombre : null, archivo: tr && tr.tipo === 'archivo' ? tr.nombre : null,
+    navegador: navigator.userAgent, vid_pid: tipoOrigen() === 'real' ? app.vidPid : null, baudios: CONFIG.BAUDIOS,
+    inicio_monitoreo: m.inicioMarca ? isoLocal(m.inicioMarca) : null,
+    modelo: { q10: m.params.q10, tref_c: m.params.trefC, lref_h: m.params.lrefH, nota: 'Parámetros provisionales, sin validación experimental.' },
+    e0_h: { A: m.canales.A.e0H, B: m.canales.B.e0H },
+    limites_c: { minimo: m.limites.minC, maximo: m.limites.maxC },
+    umbrales_vida_pct: umbralesVida(), empate_puntos: CONFIG.EMPATE_PUNTOS,
+    nombres_lote: app.nombres,
+    contadores_analizador: app.contadores,
+    nodos: ['A', 'B'].reduce(function (o, id) {
+      const c = m.canales[id];
+      o[id] = { sensor: c.sensor, lecturas: c.lecturas, paquetes_perdidos: c.perdidos, reinicios: c.reinicios, muestras: c.muestras.length,
+        datos_faltantes_h: redondear(c.lagunaH, 4), excursiones: c.excursiones };
+      return o;
+    }, {}),
+    eventos: m.eventos.length,
+    aviso: 'Estimación en validación. No certifica la inocuidad ni la calidad del producto.'
+  };
+}
 
 /* =====================================================================
    8. INTERFAZ: rutas, vistas y componentes
@@ -1636,7 +2009,10 @@ function procesarLinea(linea, tiempo) {
   if (r.clase !== 'mensaje') { app.sucio = true; return; }
 
   const msg = r.msg;
-  if (msg.tipo === 'reading') registrarLectura(app.monitor, msg, tiempo);
+  if (msg.tipo === 'reading') {
+    registrarLectura(app.monitor, msg, tiempo);
+    if (app.monitor === app.monitorReal) guardarSesionReal(false);
+  }
   else if (msg.tipo === 'hello') {
     app.hello = msg;
     const c = app.monitor.canales[msg.nodo];
@@ -1646,7 +2022,6 @@ function procesarLinea(linea, tiempo) {
   app.sucio = true;
 }
 
-/*TRANSPORTES-REALES*/
 
 // ---------- Modos ----------
 function iniciarDemo(escenarioId) {
@@ -2287,6 +2662,449 @@ async function copiarConsola() {
   }
 }
 
+// ---------- Diálogo de confirmación propio (sin confirm()) ----------
+function confirmar(titulo, texto, textoAceptar) {
+  return new Promise(function (resolver) {
+    const d = $('dialogo');
+    $('dialogo-titulo').textContent = titulo;
+    $('dialogo-texto').textContent = texto;
+    $('dialogo-aceptar').textContent = textoAceptar;
+    function cerrar(valor) {
+      $('dialogo-aceptar').removeEventListener('click', si);
+      $('dialogo-cancelar').removeEventListener('click', no);
+      d.removeEventListener('cancel', no);
+      if (d.open) d.close();
+      resolver(valor);
+    }
+    function si() { cerrar(true); }
+    function no(e) { if (e) e.preventDefault(); cerrar(false); }
+    $('dialogo-aceptar').addEventListener('click', si);
+    $('dialogo-cancelar').addEventListener('click', no);
+    d.addEventListener('cancel', no);         // tecla Esc
+    d.showModal();
+    $('dialogo-cancelar').focus();
+  });
+}
+
+// ---------- Límites y parámetros (se editan en el monitor activo) ----------
+let ajustesDe = null;   // monitor cuyos valores están en los campos
+function llenarAjustes(forzar) {
+  const m = app.monitor;
+  if (!m || (!forzar && ajustesDe === m)) return;
+  ajustesDe = m;
+  const pone = function (id, v) { const e = $(id); if (document.activeElement !== e) e.value = String(v); };
+  pone('lim-min', m.limites.minC); pone('lim-max', m.limites.maxC);
+  pone('par-q10', m.params.q10); pone('par-tref', m.params.trefC); pone('par-lref', m.params.lrefH);
+  pone('par-e0a', redondear(m.canales.A.e0H, 3)); pone('par-e0b', redondear(m.canales.B.e0H, 3));
+  ['A', 'B'].forEach(function (id) { const e = $('e0-' + id); if (e && document.activeElement !== e) e.value = String(redondear(m.canales[id].e0H, 3)); });
+}
+
+function leerNumero(id) {
+  const t = String($(id).value).trim().replace(',', '.');
+  return t === '' ? NaN : Number(t);
+}
+
+function aplicarLimites() {
+  const minC = leerNumero('lim-min'), maxC = leerNumero('lim-max');
+  const err = $('lim-error');
+  if (!Number.isFinite(minC) || !Number.isFinite(maxC)) { err.textContent = 'Escriba un número en los dos campos.'; return; }
+  if (minC < CONFIG.LIMITE_EDITABLE_MIN_C || maxC > CONFIG.LIMITE_EDITABLE_MAX_C || minC > CONFIG.LIMITE_EDITABLE_MAX_C || maxC < CONFIG.LIMITE_EDITABLE_MIN_C) {
+    err.textContent = 'Los límites deben estar entre −10 y 40 °C.'; return;
+  }
+  if (minC >= maxC) { err.textContent = 'El mínimo debe ser menor que el máximo.'; return; }
+  err.textContent = '';
+  const m = app.monitor, antes = m.limites, t = tiempoActual();
+  if (minC === antes.minC && maxC === antes.maxC) return;
+  m.limites = { minC: minC, maxC: maxC };
+  if (minC !== antes.minC) agregarEvento(m, t, { tipo: 'Cambio de límites', texto: 'Límite mínimo cambiado de ' + formatoNumero(antes.minC, 1) + ' a ' + formatoNumero(minC, 1) + ' °C' });
+  if (maxC !== antes.maxC) agregarEvento(m, t, { tipo: 'Cambio de límites', texto: 'Límite máximo cambiado de ' + formatoNumero(antes.maxC, 1) + ' a ' + formatoNumero(maxC, 1) + ' °C' });
+  // Efecto inmediato en los avisos: se reevalúa la última lectura válida.
+  ['A', 'B'].forEach(function (id) {
+    const c = m.canales[id];
+    if (!c.ultimaValida) return;
+    const est = estadoTermico(c.ultimaValida.tC, m.limites);
+    c.ultimoEstadoTermico = est;
+    c.fueraSeguidas = est === 'dentro' ? 0 : 1;
+    c.dentroSeguidas = est === 'dentro' ? 1 : 0;
+    if (c.enExcursion && est === 'dentro') {
+      c.enExcursion = false; c.causaExcursion = null;
+      cerrarEvento(c.eventoExcursion); c.eventoExcursion = null;
+      agregarEvento(m, t, { tipo: 'Regreso al rango', carga: id, texto: 'Carga ' + id + ' quedó dentro del nuevo rango',
+        valor: formatoNumero(c.ultimaValida.tC, 1) + ' °C', recomendacion: 'Sin acción inmediata; la excursión queda en el historial.' });
+    } else if (c.enExcursion) c.causaExcursion = est;
+  });
+  if (app.modo === 'demo') app.limites = Object.assign({}, m.limites);
+  if (m === app.monitorReal) guardarSesionReal(true);
+  app.sucio = true;
+}
+
+function aplicarParametros(e0Desde) {
+  const err = $('par-error');
+  const q10 = leerNumero('par-q10'), trefC = leerNumero('par-tref'), lrefH = leerNumero('par-lref');
+  const m = app.monitor;
+  let e0A = leerNumero('par-e0a'), e0B = leerNumero('par-e0b');
+  if (e0Desde === 'cargas') { e0A = leerNumero('e0-A'); e0B = leerNumero('e0-B'); }
+  const mal = function (t) { err.textContent = t; const e2 = $('e0-error'); if (e2) e2.textContent = t; };
+  if (![q10, trefC, lrefH, e0A, e0B].every(Number.isFinite)) { mal('Escriba un número en todos los campos.'); return; }
+  if (q10 < 1 || q10 > 5) { mal('Q10 debe estar entre 1 y 5.'); return; }
+  if (trefC < -10 || trefC > 40) { mal('Tref debe estar entre −10 y 40 °C.'); return; }
+  if (lrefH < 1 || lrefH > 1000) { mal('Lref debe estar entre 1 y 1000 h.'); return; }
+  if (e0A < 0 || e0B < 0 || e0A > lrefH || e0B > lrefH) { mal('E0 debe estar entre 0 y Lref.'); return; }
+  mal('');
+  const t = tiempoActual(), antes = m.params;
+  const cambios = [];
+  if (q10 !== antes.q10) cambios.push('Q10 de ' + antes.q10 + ' a ' + q10);
+  if (trefC !== antes.trefC) cambios.push('Tref de ' + antes.trefC + ' a ' + trefC + ' °C');
+  if (lrefH !== antes.lrefH) cambios.push('Lref de ' + antes.lrefH + ' a ' + lrefH + ' h');
+  ['A', 'B'].forEach(function (id) {
+    const nuevo = id === 'A' ? e0A : e0B;
+    if (Math.abs(nuevo - m.canales[id].e0H) > 1e-9) { cambios.push('E0 de la carga ' + id + ' de ' + redondear(m.canales[id].e0H, 3) + ' a ' + nuevo + ' h'); m.canales[id].e0H = nuevo; }
+  });
+  if (!cambios.length) return;
+  m.params = { q10: q10, trefC: trefC, lrefH: lrefH };
+  cambios.forEach(function (c) { agregarEvento(m, t, { tipo: 'Cambio de parámetros', texto: 'Parámetro ' + c + ' (provisional)', recomendacion: 'Se recalculó el historial con los mismos tramos.' }); });
+  recalcularModelo(m, t);
+  if (app.modo === 'demo') app.params = Object.assign({}, m.params);
+  if (m === app.monitorReal) guardarSesionReal(true);
+  llenarAjustes(true);
+  app.sucio = true;
+}
+
+// ---------- Vista Temperatura ----------
+const temp = { grafica: null, carga: 'AB', ventana: 0, tabla: false, filas: [] };
+const MAX_FILAS_TABLA = 200;
+function construirTemperatura() {
+  temp.grafica = crearGrafica($('grafica-temp'), { alto: 320 });
+  const cuerpo = $('tabla-temp-cuerpo');
+  for (let i = 0; i < MAX_FILAS_TABLA; i += 1) {
+    const tr = crear('tr');
+    const c = [crear('td'), crear('td'), crear('td')];
+    tr.append(c[0], c[1], c[2]);
+    tr.hidden = true;
+    cuerpo.appendChild(tr);
+    temp.filas.push({ tr: tr, c: c });
+  }
+}
+function renderTemperatura() {
+  const o = tipoOrigen();
+  pintarGrafica(temp.grafica, { carga: temp.carga, ventanaH: temp.ventana > 0 ? temp.ventana : Infinity });
+  document.querySelectorAll('#vista-temperatura [data-carga]').forEach(function (b) { b.setAttribute('aria-pressed', String(b.getAttribute('data-carga') === temp.carga)); });
+  document.querySelectorAll('#vista-temperatura [data-ventana]').forEach(function (b) { b.setAttribute('aria-pressed', String(Number(b.getAttribute('data-ventana')) === temp.ventana)); });
+  fijarTexto($('nota-ventana'), o === 'demo' ? '(tiempo simulado)' : (o === 'archivo' ? '(tiempo del archivo)' : '(hora local)'));
+  fijarTexto($('temp-meta'), 'Rango aceptable: ' + formatoNumero(app.monitor.limites.minC, 1) + ' a ' + formatoNumero(app.monitor.limites.maxC, 1) + ' °C' + (o === 'demo' ? ' · DATOS SIMULADOS' : ''));
+  $('tabla-temp').hidden = !temp.tabla;
+  $('btn-tabla').setAttribute('aria-pressed', String(temp.tabla));
+  fijarTexto($('btn-tabla'), temp.tabla ? 'Ver como gráfica' : 'Ver como tabla');
+  $('grafica-temp').hidden = temp.tabla;
+  if (temp.tabla) {
+    const d = temp.grafica.datos;
+    const filas = new Map();
+    if (d) d.series.forEach(function (sr, k) { if (sr.visible) sr.prep.segmentos.forEach(function (seg) { seg.forEach(function (pt) { const f = filas.get(pt.x) || [null, null]; f[k] = pt.y; filas.set(pt.x, f); }); }); });
+    const xs = Array.from(filas.keys()).sort(function (a, b) { return b - a; }).slice(0, MAX_FILAS_TABLA);
+    temp.filas.forEach(function (f, i) {
+      const x = xs[i];
+      f.tr.hidden = x === undefined;
+      if (x === undefined) return;
+      const v = filas.get(x);
+      fijarTexto(f.c[0], d.formatoTip(x));
+      fijarTexto(f.c[1], v[0] === null ? '—' : formatoNumero(v[0], 2));
+      fijarTexto(f.c[2], v[1] === null ? '—' : formatoNumero(v[1], 2));
+    });
+  }
+}
+
+// ---------- Vista Cargas ----------
+const cargasUI = {};
+function crearCurvaVida(contenedor) {
+  const alto = 150, M = { izq: 40, der: 12, arr: 10, aba: 24 };
+  const svg = svgEl('svg', { class: 'grafica', role: 'img', 'aria-label': 'Curva de vida útil estimada' });
+  const lineas = [0, 20, 40, 60, 100].map(function (v) { return { v: v, l: svgEl('line', { class: 'reticula', 'stroke-dasharray': v % 100 ? '4 4' : 'none' }, svg), t: svgEl('text', { 'text-anchor': 'end' }, svg) }; });
+  const eje = svgEl('line', { class: 'eje' }, svg);
+  const camino = svgEl('path', { fill: 'none', stroke: 'var(--cyan)', 'stroke-width': 2.25 }, svg);
+  const t0 = svgEl('text', {}, svg), t1 = svgEl('text', { 'text-anchor': 'end' }, svg), tu = svgEl('text', {}, svg);
+  const vacio = crear('div', 'grafica-vacia', 'Sin lecturas todavía.');
+  contenedor.append(svg, vacio);
+  return function dibujar(muestras, formatoX) {
+    const n = muestras.length;
+    svg.style.display = n ? '' : 'none';
+    vacio.hidden = n > 0;
+    if (!n) return;
+    const ancho = Math.max(260, contenedor.clientWidth || 400);
+    svg.setAttribute('viewBox', '0 0 ' + ancho + ' ' + alto); svg.setAttribute('width', ancho); svg.setAttribute('height', alto);
+    const x0 = muestras.get(0).tH, x1 = Math.max(muestras.get(n - 1).tH, x0 + 1e-6);
+    const sx = function (x) { return M.izq + (x - x0) / (x1 - x0) * (ancho - M.izq - M.der); };
+    const sy = function (y) { return M.arr + (100 - y) / 100 * (alto - M.arr - M.aba); };
+    lineas.forEach(function (L) {
+      const y = sy(L.v).toFixed(1);
+      L.l.setAttribute('x1', M.izq); L.l.setAttribute('x2', ancho - M.der); L.l.setAttribute('y1', y); L.l.setAttribute('y2', y);
+      L.t.setAttribute('x', M.izq - 6); L.t.setAttribute('y', Number(y) + 4); L.t.textContent = L.v + ' %';
+    });
+    eje.setAttribute('x1', M.izq); eje.setAttribute('x2', ancho - M.der); eje.setAttribute('y1', alto - M.aba); eje.setAttribute('y2', alto - M.aba);
+    const paso = Math.max(1, Math.ceil(n / 300));
+    let d = '';
+    for (let i = 0; i < n; i += paso) { const s = muestras.get(i); d += (d ? 'L' : 'M') + sx(s.tH).toFixed(1) + ' ' + sy(s.vida).toFixed(1); }
+    const ult = muestras.get(n - 1);
+    d += 'L' + sx(ult.tH).toFixed(1) + ' ' + sy(ult.vida).toFixed(1);
+    camino.setAttribute('d', d);
+    t0.setAttribute('x', M.izq); t0.setAttribute('y', alto - 6); t0.textContent = formatoX(x0);
+    t1.setAttribute('x', ancho - M.der); t1.setAttribute('y', alto - 6); t1.textContent = formatoX(x1);
+    tu.setAttribute('x', 2); tu.setAttribute('y', 10); tu.textContent = '%';
+  };
+}
+
+function construirCargas() {
+  ['A', 'B'].forEach(function (id) {
+    const panel = $('carga-panel-' + id);
+    const h = crear('h2', '', '');
+    h.id = 'h-carga-' + id;
+    h.style.fontSize = '1.25rem';
+    const curvaCaja = crear('div');
+    curvaCaja.style.margin = '8px 0 12px';
+    const dl = crear('dl', 'kv');
+    const filas = crearKV(dl, [['nivel', 'Nivel de estado'], ['temp', 'Temperatura actual'], ['vida', 'Vida útil estimada'], ['consumidas', 'Horas equivalentes consumidas (E0 + E)'],
+      ['saldo', 'Saldo (horas equivalentes a Tref)'], ['tmin', 'T mínima'], ['tmed', 'T media'], ['tmax', 'T máxima'], ['exc', 'Excursiones'],
+      ['fuera', 'Tiempo fuera de rango'], ['falt', 'Datos faltantes'], ['validas', 'Lecturas válidas']]);
+    const campo = crear('div', 'campo');
+    campo.style.marginTop = '12px';
+    const etq = crear('label', '', 'E0: consumo inicial de la carga ' + id + ' (h equivalentes)');
+    etq.setAttribute('for', 'e0-' + id);
+    const inp = crear('input');
+    inp.id = 'e0-' + id; inp.type = 'number'; inp.step = '0.1'; inp.min = '0'; inp.inputMode = 'decimal';
+    inp.addEventListener('change', function () { aplicarParametros('cargas'); });
+    campo.append(etq, inp);
+    const origen = crear('p', 'origen');
+    panel.append(h, curvaCaja, dl, campo, origen);
+    cargasUI[id] = { h: h, filas: filas, curva: crearCurvaVida(curvaCaja), origen: origen };
+  });
+  const err = crear('div', 'error-campo');
+  err.id = 'e0-error';
+  err.setAttribute('role', 'alert');
+  $('vista-cargas').appendChild(err);
+}
+
+function renderCargas() {
+  const m = app.monitor, o = tipoOrigen(), ahora = tiempoActual();
+  const r = calcularResumen(m, ahora.tH);
+  fijarTexto($('cargas-meta'), 'Q10 = ' + m.params.q10 + ' · Tref = ' + m.params.trefC + ' °C · Lref = ' + m.params.lrefH + ' h (provisionales)');
+  const fx = o === 'real' ? function (x) { return horaLocal((m.inicioMarca || Date.now()) + x * 3600000, false); } : function (x) { return formatoT(x, o === 'archivo'); };
+  ['A', 'B'].forEach(function (id) {
+    const c = m.canales[id], u = cargasUI[id], vm = id === 'A' ? r.vmA : r.vmB, f = u.filas;
+    fijarTexto(u.h, app.nombres[id]);
+    fijarTexto(f.nivel, NOMBRE_NIVEL[vm.nivel] + (vm.causas.length ? ' · ' + vm.causas.join(' · ') : (vm.sinDatos ? ' · ' + vm.detalle : '')));
+    fijarTexto(f.temp, vm.tC === null || vm.sinDatos ? '—' : formatoNumero(vm.tC, 2) + ' °C');
+    fijarTexto(f.vida, vm.vidaPct === null || vm.sinDatos ? '—' : formatoNumero(vm.vidaPct, 1) + ' %');
+    fijarTexto(f.consumidas, formatoNumero(c.e0H + c.eH, 2) + ' h');
+    fijarTexto(f.saldo, formatoNumero(saldoHoras(c.e0H, c.eH, m.params), 2) + ' h');
+    fijarTexto(f.tmin, c.tN ? formatoNumero(c.tMin, 2) + ' °C' : '—');
+    fijarTexto(f.tmed, c.tN ? formatoNumero(c.tSuma / c.tN, 2) + ' °C' : '—');
+    fijarTexto(f.tmax, c.tN ? formatoNumero(c.tMax, 2) + ' °C' : '—');
+    fijarTexto(f.exc, String(c.excursiones));
+    fijarTexto(f.fuera, textoDuracionMin(c.fueraH));
+    fijarTexto(f.falt, textoDuracionMin(c.lagunaH) + (c.lagunaH > 0 ? ' (estimación incompleta)' : ''));
+    fijarTexto(f.validas, String(c.tN));
+    fijarTexto(u.origen, textoOrigen(m, id));
+    u.origen.className = 'origen' + (o === 'demo' ? '' : o === 'archivo' ? ' archivo' : ' real');
+    u.curva(c.muestras, fx);
+  });
+  llenarAjustes(false);
+}
+
+// ---------- Vista Alertas ----------
+const TIPOS_EVENTO = ['Salida de rango', 'Regreso al rango', 'Nivel por vida útil', 'Vida útil agotada', 'Falla de sonda', 'Sonda recuperada',
+  'Nodo sin datos', 'Nodo recuperado', 'Reinicio de nodo', 'Conexión USB', 'Cambio de límites', 'Cambio de parámetros', 'Reinicio de monitoreo', 'Acción de demostración'];
+let alertasPintadas = '';
+function construirAlertas() {
+  const sel = $('filtro-tipo');
+  TIPOS_EVENTO.forEach(function (t) { const o = crear('option', '', t); o.value = t; sel.appendChild(o); });
+}
+function renderAlertas() {
+  const m = app.monitor;
+  const fc = $('filtro-carga').value, ft = $('filtro-tipo').value;
+  const clave = m.siguienteId + '|' + m.version + '|' + fc + '|' + ft + '|' + tipoOrigen();
+  const activas = m.eventos.filter(function (e) { return e.estado === 'activa'; }).length;
+  fijarTexto($('alertas-meta'), m.eventos.length + ' eventos (máximo ' + CONFIG.MAX_EVENTOS + ') · ' + activas + ' activos' + (tipoOrigen() === 'demo' ? ' · DATOS SIMULADOS' : ''));
+  if (clave === alertasPintadas) return;
+  alertasPintadas = clave;
+  const cuerpo = $('tabla-eventos-cuerpo');
+  const frag = document.createDocumentFragment();
+  let n = 0;
+  for (let i = m.eventos.length - 1; i >= 0; i -= 1) {
+    const ev = m.eventos[i];
+    if (fc && ev.carga !== fc) continue;
+    if (ft && ev.tipo !== ft) continue;
+    const tr = crear('tr');
+    tr.append(crear('td', 'num', textoHora(ev.tH, ev.marca)), crear('td', '', ev.tipo), crear('td', '', ev.carga), crear('td', '', ev.texto),
+      crear('td', 'num', ev.valor || '—'), crear('td', '', ev.recomendacion || '—'),
+      crear('td', ev.estado === 'activa' ? 'estado-activa' : '', ev.estado === 'activa' ? 'Activa' : 'Cerrada'), crear('td', 'num', ev.limite));
+    frag.appendChild(tr);
+    n += 1;
+  }
+  while (cuerpo.firstChild) cuerpo.removeChild(cuerpo.firstChild);
+  cuerpo.appendChild(frag);
+  $('alertas-vacio').hidden = n > 0;
+  $('alertas-vacio').textContent = m.eventos.length ? 'Ningún evento coincide con el filtro.' : 'Sin eventos todavía.';
+}
+function vaciarAlertas() {
+  const cuerpo = $('tabla-eventos-cuerpo');
+  while (cuerpo.firstChild) cuerpo.removeChild(cuerpo.firstChild);
+  alertasPintadas = '';
+}
+
+// ---------- Vista Reportes ----------
+function renderReportes() {
+  const o = tipoOrigen(), m = app.monitor;
+  fijarTexto($('reportes-meta'), 'Origen de los datos: ' + (o === 'demo' ? 'SIMULADOS (' + m.escenario.nombre + ')' : o === 'archivo' ? 'reproducción de archivo' : 'sensores reales'));
+  let t;
+  if (!almacen.disponible) t = 'Sin almacenamiento local: los datos se perderán al cerrar la página.';
+  else {
+    const r = app.monitorReal;
+    const na = r ? r.canales.A.muestras.length : 0, nb = r ? r.canales.B.muestras.length : 0;
+    t = 'Solo se guardan los datos de SENSORES REALES (prefijo kairos.v1., hasta ' + CONFIG.MAX_MUESTRAS_GUARDADAS.toLocaleString('es-MX') + ' muestras por nodo). En memoria: ' + na + ' muestras de A y ' + nb + ' de B.' +
+      (errorGuardado ? ' Aviso: el último guardado falló (almacenamiento lleno).' : '');
+  }
+  fijarTexto($('almacen-estado'), t);
+  $('btn-borrar').disabled = !almacen.disponible;
+}
+
+function descargarMuestras() {
+  const r = csvMuestras(app.monitor);
+  const nombre = 'kairos_' + nombreOrigen() + '_' + sello() + '.csv';
+  descargar(nombre, r.texto, 'text/csv;charset=utf-8');
+  $('descarga-estado').textContent = 'Descargado ' + nombre + ' (' + r.filas + ' muestras).';
+}
+function descargarEventos() {
+  const nombre = 'kairos_eventos_' + nombreOrigen() + '_' + sello() + '.csv';
+  descargar(nombre, csvEventos(app.monitor), 'text/csv;charset=utf-8');
+  $('descarga-estado').textContent = 'Descargado ' + nombre + ' (' + app.monitor.eventos.length + ' eventos).';
+}
+function descargarMetadatos() {
+  const nombre = 'kairos_metadatos_' + nombreOrigen() + '_' + sello() + '.json';
+  descargar(nombre, JSON.stringify(metadatos(app.monitor), null, 2), 'application/json');
+  $('descarga-estado').textContent = 'Descargado ' + nombre + '.';
+}
+
+function imprimirResumen() {
+  const m = app.monitor, o = tipoOrigen(), ahora = tiempoActual();
+  const r = calcularResumen(m, ahora.tH);
+  const caja = $('imprimible');
+  while (caja.firstChild) caja.removeChild(caja.firstChild);
+  caja.append(crear('h1', '', 'KAIROS DYNAMICS · Resumen por carga'));
+  caja.append(crear('p', '', (o === 'demo' ? 'DATOS SIMULADOS · ' + m.escenario.nombre + ' · ' + formatoT(ahora.tH, false) : o === 'archivo' ? 'Reproducción de archivo · ' + app.transporte.nombre : 'Sensores reales · ' + textoInicioMonitoreo()) + ' · generado ' + fechaHoraLocal(Date.now())));
+  caja.append(crear('p', '', 'Modelo Q10 con parámetros provisionales: Q10 = ' + m.params.q10 + ', Tref = ' + m.params.trefC + ' °C, Lref = ' + m.params.lrefH + ' h. ' + textoLimites(m.limites) + '. Estimación en validación.'));
+  ['A', 'B'].forEach(function (id) {
+    const c = m.canales[id], vm = id === 'A' ? r.vmA : r.vmB;
+    caja.append(crear('h2', '', 'Carga ' + id + ' · ' + app.nombres[id]));
+    const t = crear('table'), tb = crear('tbody');
+    [['Nivel', NOMBRE_NIVEL[vm.nivel] + (vm.causas.length ? ' (' + vm.causas.join('; ') + ')' : '')],
+      ['Temperatura actual', vm.tC === null || vm.sinDatos ? '—' : formatoNumero(vm.tC, 2) + ' °C'],
+      ['Vida útil estimada', vm.vidaPct === null || vm.sinDatos ? '—' : formatoNumero(vm.vidaPct, 1) + ' %'],
+      ['Horas equivalentes consumidas (E0 + E)', formatoNumero(c.e0H + c.eH, 2) + ' h (E0 = ' + formatoNumero(c.e0H, 1) + ' h)'],
+      ['T mínima / media / máxima', c.tN ? formatoNumero(c.tMin, 2) + ' / ' + formatoNumero(c.tSuma / c.tN, 2) + ' / ' + formatoNumero(c.tMax, 2) + ' °C' : '—'],
+      ['Excursiones · tiempo fuera de rango', c.excursiones + ' · ' + textoDuracionMin(c.fueraH)],
+      ['Datos faltantes', textoDuracionMin(c.lagunaH)]].forEach(function (f) {
+      const tr = crear('tr');
+      tr.append(crear('th', '', f[0]), crear('td', '', f[1]));
+      tb.appendChild(tr);
+    });
+    t.appendChild(tb);
+    caja.append(t);
+  });
+  caja.append(crear('h2', '', 'Recomendación de entrega: ' + r.rec.titulo));
+  caja.append(crear('p', '', r.rec.motivo));
+  caja.append(crear('p', '', 'Sugerencia basada en una estimación provisional. No certifica la inocuidad ni la calidad del producto.'));
+  window.print();
+}
+
+async function borrarDatosLocales() {
+  const ok = await confirmar('¿Borrar los datos locales?', 'Se borrarán de esta computadora las lecturas reales guardadas, los eventos y los nombres de lote. La demostración no cambia. No se puede deshacer.', 'Borrar datos');
+  if (!ok) return;
+  almacen.borrarTodo();
+  app.nombres = { A: CONFIG.NOMBRE_LOTE.A, B: CONFIG.NOMBRE_LOTE.B };
+  const enUso = app.monitor === app.monitorReal;
+  app.monitorReal = nuevoMonitorReal();
+  if (enUso) app.monitor = app.monitorReal;
+  $('descarga-estado').textContent = 'Datos locales borrados.';
+  app.sucio = true;
+}
+
+async function reiniciarMonitoreo() {
+  const ok = await confirmar('¿Reiniciar el monitoreo?', 'El porcentaje volverá a contar desde ahora. Las lecturas y eventos reales registrados hasta este momento se descartan (descárguelos antes en Reportes si los necesita).', 'Reiniciar monitoreo');
+  if (!ok) return;
+  const anterior = app.monitorReal;
+  app.monitorReal = nuevoMonitorReal();
+  app.monitorReal.params = Object.assign({}, anterior.params);
+  app.monitorReal.limites = Object.assign({}, anterior.limites);
+  if (app.monitor === anterior) app.monitor = app.monitorReal;
+  agregarEvento(app.monitorReal, { tH: 0, marca: Date.now() }, { tipo: 'Reinicio de monitoreo', texto: 'Se reinició el monitoreo' });
+  guardarSesionReal(true);
+  app.sucio = true;
+}
+
+// ---------- Página institucional: miniatura viva del Resumen ----------
+const hero = { monitor: null, transporte: null, tarjetas: null, reco: null, reinicioEn: 0 };
+function construirInicio() {
+  hero.tarjetas = { A: crearTarjeta($('mini-tarjetas'), 'A', false), B: crearTarjeta($('mini-tarjetas'), 'B', false) };
+  hero.reco = crearReco($('mini-reco'), true);
+  const ul = $('lista-equipo');
+  CONFIG.EQUIPO.forEach(function (n) { ul.appendChild(crear('li', '', n)); });
+  $('linea-evento').textContent = CONFIG.LINEA_EVENTO;
+  if (CONFIG.NUMERO_REGISTRO) { $('registro-evento').textContent = 'Número de registro: ' + CONFIG.NUMERO_REGISTRO; $('registro-evento').hidden = false; }
+  $('version-inicio').textContent = 'KAIROS DYNAMICS · v' + CONFIG.VERSION;
+  // Las secciones entran una sola vez (desvanecimiento y 8 px).
+  prepararEntradas();
+  document.querySelectorAll('[data-desplazar]').forEach(function (a) {
+    a.addEventListener('click', function (e) {
+      e.preventDefault();
+      const destino = $(a.getAttribute('data-desplazar'));
+      destino.scrollIntoView({ behavior: movimientoReducido() ? 'auto' : 'smooth', block: 'start' });
+      const h = destino.querySelector('h1, h2');
+      if (h) { if (!h.hasAttribute('tabindex')) h.setAttribute('tabindex', '-1'); h.focus({ preventScroll: true }); }
+    });
+  });
+}
+// Las secciones que quedan debajo de la primera pantalla entran una sola vez.
+// Si el navegador no tiene IntersectionObserver o se pide menos movimiento, no se oculta nada.
+let entradasPreparadas = false;
+function prepararEntradas() {
+  if (entradasPreparadas || $('vista-inicio').hidden || !('IntersectionObserver' in window) || movimientoReducido()) return;
+  entradasPreparadas = true;
+  const io = new IntersectionObserver(function (entradas) {
+    entradas.forEach(function (e) { if (e.isIntersecting) { e.target.classList.remove('oculta'); io.unobserve(e.target); } });
+  }, { threshold: 0.1 });
+  document.querySelectorAll('.entrada').forEach(function (sec) {
+    if (sec.getBoundingClientRect().top > window.innerHeight) { sec.classList.add('oculta'); io.observe(sec); }
+  });
+}
+function iniciarHero() {
+  if (hero.transporte) hero.transporte.stop();
+  const esc = ESCENARIOS[1];
+  const tr = crearTransporteDemo(1, 2);
+  hero.monitor = crearMonitor({ modo: 'demo', escenario: esc, params: parametrosPorDefecto(), limites: { minC: CONFIG.LIMITE_MIN_C, maxC: CONFIG.LIMITE_MAX_C }, e0H: esc.e0H, umbralOpc: tr.umbralOpc });
+  tr.onLine(function (linea, t) {
+    const r = analizarLinea(linea);
+    if (r.clase === 'mensaje' && r.msg.tipo === 'reading') registrarLectura(hero.monitor, r.msg, t);
+  });
+  tr.start();
+  hero.transporte = tr;
+  hero.reinicioEn = 0;
+}
+function detenerHero() { if (hero.transporte) hero.transporte.stop(); hero.transporte = null; }
+function tickHero(ahora) {
+  if (app.vista !== 'inicio') return;
+  if (!hero.transporte) iniciarHero();
+  const tr = hero.transporte;
+  tr.tick();
+  if (tr.terminado) {                       // se reinicia sola al terminar
+    if (!hero.reinicioEn) hero.reinicioEn = ahora + 3000;
+    else if (ahora > hero.reinicioEn) iniciarHero();
+  }
+  const r = calcularResumen(hero.monitor, tr.ahoraH());
+  const ctx = function (id) { return { nombre: CONFIG.NOMBRE_LOTE[id], origen: 'demo', origenTexto: 'Datos simulados', claseOrigen: '' }; };
+  hero.tarjetas.A.actualizar(r.vmA, ctx('A'));
+  hero.tarjetas.B.actualizar(r.vmB, ctx('B'));
+  hero.reco.actualizar(r.rec, r.vmA, r.vmB);
+}
+
 // ---------- Barra superior ----------
 const TEXTO_CONEXION = {
   DEMO: 'Modo demostración · sin hardware',
@@ -2332,9 +3150,13 @@ function render(forzar) {
   if (!app.monitor || !app.vista || app.vista === 'inicio' || app.vista === 'autotest') return;
   renderBarraSup();
   $('aviso-almacen').hidden = almacen.disponible || app.modo !== 'real';
+  if (ajustesDe !== app.monitor) llenarAjustes(true);
   if (app.vista === 'resumen') renderResumen();
   if (app.vista === 'dispositivos') renderDispositivos();
-  /*RENDER-VISTAS*/
+  if (app.vista === 'cargas') renderCargas();
+  if (app.vista === 'temperatura') { renderTemperatura(); llenarAjustes(false); }
+  if (app.vista === 'alertas') renderAlertas();
+  if (app.vista === 'reportes') renderReportes();
   app.sucio = false;
   app.ultimoRender = performance.now();
 }
@@ -2353,6 +3175,7 @@ const RUTAS = {
 const TITULO_VISTA = { inicio: 'Inicio', resumen: 'Resumen', cargas: 'Cargas', temperatura: 'Temperatura', alertas: 'Alertas', dispositivos: 'Dispositivos', reportes: 'Reportes', autotest: 'Autopruebas' };
 
 let rutaYaAplicada = false;
+let sinFocoEnSiguienteRuta = false;
 function aplicarRuta() {
   const hash = location.hash && location.hash !== '#' ? location.hash : '#/';
   let destino = RUTAS[hash];
@@ -2372,7 +3195,9 @@ function aplicarRuta() {
   app.vista = destino;
   document.title = TITULO_VISTA[destino] + ' · KAIROS DYNAMICS';
   if (destino === 'autotest') pintarAutopruebas();
-  /*RUTA-EXTRA*/
+  if (destino === 'inicio') { iniciarHero(); prepararEntradas(); } else detenerHero();
+  if (destino !== 'alertas') vaciarAlertas();
+  if (destino === 'temperatura' || destino === 'cargas') llenarAjustes(true);
   app.sucio = true;
   render(true);
 
@@ -2380,7 +3205,8 @@ function aplicarRuta() {
   const contenedor = destino === 'inicio' ? $('vista-inicio') : (destino === 'autotest' ? $('vista-autotest') : $('vista-' + destino));
   const h1 = contenedor.querySelector('h1');
   window.scrollTo(0, 0);
-  if (h1 && rutaYaAplicada) h1.focus({ preventScroll: true });
+  if (h1 && rutaYaAplicada && !sinFocoEnSiguienteRuta) h1.focus({ preventScroll: true });
+  sinFocoEnSiguienteRuta = false;
   rutaYaAplicada = true;
 }
 
@@ -2397,7 +3223,7 @@ function alternarPresentacion(forzar) {
   raiz.classList.toggle('presentacion', activo);
   $('btn-presentacion').setAttribute('aria-pressed', String(activo));
   if (activo) {
-    if (location.hash !== '#/dashboard') location.hash = '#/dashboard';
+    if (location.hash !== '#/dashboard') { sinFocoEnSiguienteRuta = true; location.hash = '#/dashboard'; }
     try {
       if (document.fullscreenEnabled && !document.fullscreenElement) {
         const p = raiz.requestFullscreen();
@@ -2491,7 +3317,33 @@ function enlazarInterfaz() {
       if (app.transporte && app.transporte.tipo === 'serial' && e.target === app.transporte.puerto) conexionPerdida();
     });
   }
-  /*ENLACES-EXTRA*/
+  document.querySelectorAll('#vista-temperatura [data-carga]').forEach(function (b) {
+    b.addEventListener('click', function () { temp.carga = b.getAttribute('data-carga'); app.sucio = true; });
+  });
+  document.querySelectorAll('#vista-temperatura [data-ventana]').forEach(function (b) {
+    b.addEventListener('click', function () { temp.ventana = Number(b.getAttribute('data-ventana')); app.sucio = true; });
+  });
+  $('btn-tabla').addEventListener('click', function () { temp.tabla = !temp.tabla; app.sucio = true; });
+  ['lim-min', 'lim-max'].forEach(function (id) { $(id).addEventListener('change', aplicarLimites); });
+  ['par-q10', 'par-tref', 'par-lref', 'par-e0a', 'par-e0b'].forEach(function (id) { $(id).addEventListener('change', function () { aplicarParametros('panel'); }); });
+  $('btn-par-defecto').addEventListener('click', function () {
+    const d = parametrosPorDefecto();
+    $('par-q10').value = d.q10; $('par-tref').value = d.trefC; $('par-lref').value = d.lrefH;
+    if (app.modo === 'demo' && app.monitor.escenario) { $('par-e0a').value = app.monitor.escenario.e0H.A; $('par-e0b').value = app.monitor.escenario.e0H.B; }
+    else { $('par-e0a').value = 0; $('par-e0b').value = 0; }
+    aplicarParametros('panel');
+  });
+  $('filtro-carga').addEventListener('change', function () { app.sucio = true; });
+  $('filtro-tipo').addEventListener('change', function () { app.sucio = true; });
+  $('btn-csv-muestras').addEventListener('click', descargarMuestras);
+  $('btn-csv-eventos').addEventListener('click', descargarEventos);
+  $('btn-json-meta').addEventListener('click', descargarMetadatos);
+  $('btn-imprimir').addEventListener('click', imprimirResumen);
+  $('btn-borrar').addEventListener('click', borrarDatosLocales);
+  $('btn-reiniciar-monitoreo').addEventListener('click', reiniciarMonitoreo);
+  // Al cerrar u ocultar la página se guarda el registro real.
+  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'hidden') guardarSesionReal(true); });
+  window.addEventListener('pagehide', function () { guardarSesionReal(true); });
 }
 
 // ---------- Bucle de dibujo (≤ 30 cuadros por segundo) ----------
@@ -2501,7 +3353,7 @@ function bucle(ahora) {
   if (ahora - ultimoCuadro < 33) return;
   ultimoCuadro = ahora;
   avanzar();
-  /*BUCLE-EXTRA*/
+  tickHero(ahora);
   // Se redibuja si cambió algo o cada segundo (para «hace N s»).
   if (app.sucio || (app.monitor && app.monitor.version !== app.versionPintada) || ahora - app.ultimoRender > 1000) {
     if (app.monitor) app.versionPintada = app.monitor.version;
@@ -2607,7 +3459,7 @@ function crearGrafica(contenedor, opc) {
   caja.append(svg, vacio, tip);
   contenedor.appendChild(caja);
 
-  const M = { izq: 46, der: opc.compacta ? 64 : 72, arr: 14, aba: 30 };
+  const M = { izq: 46, der: opc.compacta ? 64 : 72, arr: 18, aba: 30 };
   let ancho = Math.max(280, contenedor.clientWidth || 600);
   let ultimo = null;   // últimos datos dibujados (para el cursor)
 
@@ -2677,7 +3529,7 @@ function crearGrafica(contenedor, opc) {
     ejeY.setAttribute('x1', M.izq); ejeY.setAttribute('x2', M.izq);
     ejeY.setAttribute('y1', M.arr); ejeY.setAttribute('y2', alto - M.aba);
     unidadY.setAttribute('x', 4); unidadY.setAttribute('y', M.arr + 2); unidadY.textContent = '°C';
-    unidadX.setAttribute('x', ancho - 4); unidadX.setAttribute('y', alto - 4); unidadX.textContent = d.unidadX;
+    unidadX.setAttribute('x', ancho - M.der); unidadX.setAttribute('y', M.arr - 2); unidadX.textContent = 'eje horizontal: ' + d.unidadX;
 
     // Banda del rango aceptable
     const yMax = e.sy(Math.min(d.lim.maxC, d.y1)), yMin = e.sy(Math.max(d.lim.minC, d.y0));
@@ -3011,7 +3863,10 @@ function iniciar() {
   }
   construirResumen();
   construirDispositivos();
-  /*CONSTRUIR-EXTRA*/
+  construirTemperatura();
+  construirCargas();
+  construirAlertas();
+  construirInicio();
   enlazarInterfaz();
   iniciarDemo(1);                 // cada vez que se abre la página arranca en DEMOSTRACIÓN
   aplicarRuta();

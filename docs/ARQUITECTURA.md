@@ -1,6 +1,6 @@
 # Arquitectura · KAIROS DYNAMICS
 
-Estado: **Etapa 3 terminada** (demostración, USB, reproducción de archivo y Dispositivos). Las vistas restantes llegan en la Etapa 4.
+Estado: **Etapa 4 terminada**: todas las vistas, persistencia, exportación, página institucional y modo presentación.
 
 ## 1. Flujo de datos
 
@@ -68,6 +68,10 @@ Sonda DS18B20 (A) ─GPIO4─ Placa A (ESP-32D) ── USB 115200, NDJSON ──
 | Reproducción de archivo: el tiempo sale de `up_ms` de cada nodo; un monitor aparte, rotulado «Reproducción de archivo», que no se guarda | Hora de la laptop al leer el archivo | La captura no trae la hora de recepción; `up_ms` es el reloj del nodo que midió. Así lo grabado nunca parece una lectura en vivo. |
 | El Nodo B no registra la función de «envío terminado» de ESP-NOW | Usarla para contar fallas de envío | Su firma cambió en ESP-IDF 5.5 (núcleo 3.3); las pérdidas ya se ven con `seq`. |
 | Límites editables entre −10 y 40 °C | — | El prompt dice «∂10»: errata de −10. |
+| Límites y parámetros se editan en el monitor activo; los de la demostración vuelven a los de `CONFIG` al abrir la página | Guardarlos siempre | Si se guardaran, la demostración del viernes podría arrancar con otro Q10 y dar cifras distintas a las del informe. Los del registro real sí se guardan con él. |
+| Al cambiar un límite se reevalúa la última lectura de inmediato; una excursión nueva sigue pidiendo 2 lecturas | Esperar 2 lecturas también para cerrar | El prompt pide efecto inmediato en avisos; la histéresis se conserva para abrir alertas. |
+| Persistencia: una sola clave `kairos.v1.real` (más `kairos.v1.nombres`); el tiempo con la página cerrada cuenta como datos faltantes | Varias claves por muestra | Un solo `setItem` dentro de `try/catch`; si no cabe, se reintenta con 1,000 muestras por nodo. |
+| CSV de una reproducción: `origen` = `archivo` y una columna extra `t_archivo_h` | Rotularlo `real` | Lo grabado no es una lectura en vivo (prioridad 1: veracidad). |
 
 ## 5. Partes generadas por Claude
 
@@ -76,5 +80,6 @@ Para declararlo si el jurado lo pide. La convocatoria no tiene reglas sobre uso 
 - **Etapa 1, generado por Claude (asistente de programación de Anthropic) a partir de `PROMPT_KAIROS.md` escrito por el equipo:** este documento, `PROTOCOLO.md`, `PENDIENTES.md`, `PRUEBAS.md`, `wireframes.html`, sus capturas y `tests/capturar_wireframes.js`, `firmware/00_mac_address` y `firmware/etapa1_nodo_A_json` (este último adapta el sketch original del equipo, que no se modificó).
 - **Etapa 2, generado por Claude:** `kairos_dashboard.html` (tokens, rutas, Resumen, simulador con los dos escenarios y sus controles, modelo Q10, niveles, recomendación, analizador NDJSON, detector de eventos, gráfica SVG y `#/autotest`).
 - **Etapa 3, generado por Claude:** transportes Web Serial y archivo, estados de conexión, vista Dispositivos, `firmware/nodo_A`, `firmware/nodo_B`, `tests/serial_simulado.js`, `tests/generar_captura.js`, `tests/captura_ejemplo.jsonl` (inventada) y `tests/firmware_simulado/`.
+- **Etapa 4, generado por Claude:** vistas Cargas, Temperatura, Alertas y Reportes, persistencia y exportación, página institucional (con los textos del prompt), modo presentación y `tests/persistencia_csv.js`.
 - **Del equipo:** el planteamiento, el informe, el montaje, `KAIROS_Etapa1_LecturaSonda.ino` y todas las decisiones de alcance del prompt.
 - Las etapas siguientes se irán anotando aquí. Se recomienda que el equipo lea y pueda explicar cada función antes del viernes.
