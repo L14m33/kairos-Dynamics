@@ -1,0 +1,2605 @@
+<!doctype html>
+<html lang="es-MX">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>KAIROS DYNAMICS · Monitor de cadena de frío</title>
+<!--
+  KAIROS DYNAMICS · tablero local (un solo archivo).
+  Se abre con doble clic en Chrome o Edge de escritorio. No usa internet, no carga
+  fuentes ni librerías externas y no hace ninguna petición de red.
+  El código está organizado en las 10 secciones de docs/ARQUITECTURA.md.
+-->
+<style>
+/* =====================================================================
+   TOKENS DE DISEÑO
+   Los contrastes de la tabla del prompt (sección 7) se recalcularon en la Etapa 1.
+   ===================================================================== */
+:root {
+  --bg: #0B1B2B;
+  --card: #123451;
+  --card-2: #0F2A42;          /* extremo inferior del degradado de las tarjetas */
+  --border: #3E5162;
+  --ink: #E8F1F8;
+  --ink-dim: #9DB4C8;
+  --cyan: #08C6BE;
+  --orange: #FF850F;
+  --ok: #84CC16;
+  --attn: #FACC15;
+  --warn: #FF8500;
+  --crit: #FF0000;            /* solo rellenos, barras, íconos y cifras grandes */
+  --crit-text: #FF6B6B;       /* texto rojo pequeño */
+  --nodata: #8FA3B5;
+  --ui: "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: "Cascadia Mono", Consolas, ui-monospace, monospace;
+  --radio: 14px;
+  --curva: cubic-bezier(.2, .8, .2, 1);
+  --lvl: var(--nodata);       /* color del nivel; cada tarjeta lo redefine */
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html { font-size: 16px; -webkit-text-size-adjust: 100%; }
+html.presentacion { font-size: 20px; }          /* +25 % en modo presentación */
+body {
+  margin: 0; min-height: 100vh; font-family: var(--ui); font-size: 1rem; line-height: 1.45;
+  color: var(--ink); background-color: var(--bg);
+  background-image:
+    radial-gradient(1100px 700px at 0 0, rgba(8, 198, 190, .08), transparent 70%),
+    radial-gradient(rgba(232, 241, 248, .04) 1px, transparent 1px);
+  background-size: auto, 16px 16px;
+  background-attachment: fixed;
+}
+[hidden] { display: none !important; }
+button, input, select { font: inherit; color: inherit; }
+a { color: var(--cyan); }
+:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+.num { font-variant-numeric: tabular-nums; }
+.mayus { font-size: .75rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.atenuado { color: var(--ink-dim); }
+.solo-lector { position: absolute !important; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.saltar {
+  position: absolute; left: 12px; top: -60px; z-index: 100; padding: 10px 16px; border-radius: 10px;
+  background: var(--cyan); color: var(--bg); font-weight: 700; text-decoration: none;
+}
+.saltar:focus { top: 12px; }
+
+/* ---------- Botones ---------- */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: 44px; min-width: 44px; padding: 0 14px; border-radius: 10px;
+  border: 1px solid var(--border); background: var(--card-2); color: var(--ink);
+  font-weight: 600; font-size: .875rem; cursor: pointer; white-space: nowrap; text-decoration: none;
+}
+.btn:hover { border-color: var(--ink-dim); }
+.btn[disabled] { opacity: .5; cursor: not-allowed; }
+.btn.primario { background: var(--cyan); border-color: var(--cyan); color: var(--bg); }
+.btn.peligro { background: var(--crit); border-color: var(--crit); color: #fff; font-weight: 700; font-size: 1.1875rem; }
+.btn.fantasma { background: transparent; }
+.btn svg { width: 18px; height: 18px; flex: none; }
+.btn[aria-pressed="true"] { background: var(--card); box-shadow: inset 0 -3px 0 var(--cyan); }
+.icono { width: 24px; height: 24px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
+
+/* =====================================================================
+   ESTRUCTURA DEL TABLERO
+   ===================================================================== */
+.tablero { display: grid; grid-template-columns: 232px minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); min-height: 100vh; }
+.barra-sup {
+  grid-column: 1 / -1; position: sticky; top: 0; z-index: 20;
+  display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; min-height: 56px; padding: 6px 20px;
+  border-bottom: 1px solid var(--border); background: rgba(11, 27, 43, .9);
+  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+}
+.marca { font-weight: 700; font-size: 1.125rem; letter-spacing: .02em; white-space: nowrap; text-decoration: none; margin-right: 8px; }
+.marca .k { color: var(--cyan); } .marca .d { color: var(--orange); }
+.segmentado { display: inline-flex; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; flex: none; }
+.segmentado button {
+  min-height: 44px; padding: 0 14px; border: 0; background: transparent; color: var(--ink-dim);
+  font-size: .8125rem; font-weight: 700; letter-spacing: .04em; cursor: pointer; white-space: nowrap;
+}
+.segmentado button + button { border-left: 1px solid var(--border); }
+.segmentado button[aria-pressed="true"] { background: var(--cyan); color: var(--bg); }
+.insignia {
+  display: inline-flex; align-items: center; min-height: 28px; padding: 4px 10px; border-radius: 6px;
+  font-size: .75rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; white-space: nowrap;
+  color: var(--bg); background: var(--attn);
+}
+.insignia.archivo { background: var(--ink-dim); }
+.chip-conexion {
+  display: inline-flex; align-items: center; gap: 8px; min-height: 36px; padding: 4px 6px 4px 12px;
+  border: 1px solid var(--border); border-radius: 18px; font-size: .875rem; max-width: 100%;
+}
+.chip-conexion .punto { width: 10px; height: 10px; border-radius: 50%; background: var(--nodata); flex: none; }
+.chip-conexion[data-estado="CONECTADO"] .punto { background: var(--ok); }
+.chip-conexion[data-estado="ESPERANDO"] .punto, .chip-conexion[data-estado="CONECTANDO"] .punto { background: var(--attn); }
+.chip-conexion[data-estado="PERDIDA"] .punto { background: var(--crit); }
+.chip-conexion .btn { min-height: 36px; padding: 0 12px; border-radius: 14px; }
+.chip-conexion .texto-chip { padding-right: 6px; }
+.relleno { flex: 1; }
+
+.lateral {
+  position: sticky; top: 57px; align-self: start; height: calc(100vh - 57px);
+  display: flex; flex-direction: column; gap: 4px; padding: 16px 12px; border-right: 1px solid var(--border);
+}
+.lateral a {
+  display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 0 12px; border-radius: 10px;
+  color: var(--ink-dim); text-decoration: none; font-size: 1rem;
+}
+.lateral a:hover { color: var(--ink); }
+.lateral a[aria-current="page"] { background: var(--card); color: var(--ink); box-shadow: inset 3px 0 0 var(--cyan); }
+.lateral .icono { width: 20px; height: 20px; }
+.lateral .version { margin-top: auto; padding: 0 12px; font-size: .75rem; color: var(--ink-dim); }
+.lateral .version a { color: var(--ink-dim); }
+
+.principal { padding: 16px 24px 32px; min-width: 0; outline: none; }
+.vista > h1, .fila-titulo h1 { font-size: 1.25rem; margin: 0; }
+.vista h1:focus { outline: none; }
+.vista h1:focus-visible { outline: 2px solid var(--cyan); }
+.fila-titulo { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-height: 44px; margin-bottom: 12px; }
+.fila-titulo .meta { font-size: .875rem; color: var(--ink-dim); }
+.reloj-sim { font-weight: 700; font-size: 1.25rem; white-space: nowrap; margin: 0 8px 0 4px; line-height: 1.1; }
+.reloj-sim small { display: block; font-size: .75rem; letter-spacing: .08em; color: var(--ink-dim); font-weight: 600; }
+.velocidad { display: inline-flex; align-items: center; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; flex: none; }
+.velocidad span { font-size: .75rem; color: var(--ink-dim); padding: 0 6px 0 10px; font-weight: 600; white-space: nowrap; }
+.velocidad button { min-height: 44px; min-width: 44px; padding: 0 10px; border: 0; border-left: 1px solid var(--border); background: transparent; font-weight: 600; font-size: .875rem; cursor: pointer; white-space: nowrap; }
+.velocidad button[aria-pressed="true"] { background: var(--card); box-shadow: inset 0 -3px 0 var(--cyan); }
+.separador { width: 1px; height: 32px; background: var(--border); margin: 0 4px; }
+select.btn { appearance: none; -webkit-appearance: none; padding-right: 32px; background-image: linear-gradient(45deg, transparent 50%, var(--ink-dim) 50%), linear-gradient(135deg, var(--ink-dim) 50%, transparent 50%); background-position: calc(100% - 18px) 50%, calc(100% - 12px) 50%; background-size: 6px 6px; background-repeat: no-repeat; }
+.aviso-almacen { margin: 0 0 12px; padding: 10px 14px; border: 1px solid var(--attn); border-radius: 10px; color: var(--ink); font-size: .875rem; }
+
+/* =====================================================================
+   TARJETAS (bento)
+   ===================================================================== */
+.panel {
+  position: relative; border: 1px solid var(--border); border-radius: var(--radio); padding: 16px 20px;
+  background: linear-gradient(180deg, var(--card), var(--card-2));
+  box-shadow: inset 0 1px 0 rgba(232, 241, 248, .06);
+}
+.panel > h2, .panel > h3 { margin: 0 0 10px; }
+.titulo-panel { font-size: .75rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-dim); margin: 0 0 10px; }
+
+.tarjetas { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.tarjeta { padding: 14px 20px 12px; }
+.tarjeta::before {
+  content: ""; position: absolute; left: -1px; right: -1px; top: -1px; height: 3px;
+  border-radius: var(--radio) var(--radio) 0 0; background: var(--lvl); transition: background-color 600ms var(--curva);
+}
+[data-nivel="normal"] { --lvl: var(--ok); }
+[data-nivel="atencion"] { --lvl: var(--attn); }
+[data-nivel="advertencia"] { --lvl: var(--warn); }
+[data-nivel="critico"] { --lvl: var(--crit); }
+[data-nivel="sin_datos"] { --lvl: var(--nodata); }
+.t-cabeza { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 32px; flex-wrap: wrap; }
+.lote { display: inline-flex; align-items: center; gap: 8px; min-height: 32px; padding: 0 6px; margin-left: -6px; border: 1px solid transparent; border-radius: 8px; background: transparent; font-size: 1.25rem; font-weight: 600; cursor: pointer; text-align: left; max-width: 100%; }
+.lote:hover { border-color: var(--border); }
+.lote .icono { width: 16px; height: 16px; color: var(--ink-dim); }
+.lote-input { font-size: 1.25rem; font-weight: 600; min-height: 36px; width: 100%; max-width: 320px; padding: 0 8px; border-radius: 8px; border: 1px solid var(--cyan); background: var(--bg); }
+.aviso-nivel { display: inline-flex; align-items: center; gap: 8px; font-size: .75rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--lvl); }
+[data-nivel="critico"] .aviso-nivel { color: var(--crit-text); }
+.aviso-nivel svg { width: 22px; height: 22px; flex: none; }
+[data-nivel="critico"] .aviso-nivel svg { color: var(--crit); }
+.aviso-nivel.pulso { animation: pulso 1.6s ease-in-out 3; }
+@keyframes pulso { 50% { opacity: .45; } }
+.causas { min-height: 20px; font-size: .875rem; font-weight: 600; text-align: right; color: var(--crit-text); }
+[data-nivel="sin_datos"] .causas { color: var(--nodata); }
+.t-medida { display: flex; align-items: flex-end; justify-content: space-between; flex-wrap: wrap; gap: 0 12px; }
+.temp { font-size: 5.5rem; line-height: 1; font-weight: 700; letter-spacing: -.02em; font-variant-numeric: tabular-nums; color: var(--tcol, var(--ink)); white-space: nowrap; transition: color 600ms var(--curva); }
+.temp small { font-size: 1.75rem; font-weight: 600; letter-spacing: 0; margin-left: 4px; }
+.temp[data-termico="dentro"] { --tcol: var(--cyan); }
+.temp[data-termico="fuera1"] { --tcol: var(--warn); }
+.temp[data-termico="fuera"] { --tcol: var(--crit); }
+.temp[data-termico="sin_datos"] { --tcol: var(--nodata); }
+.edad { text-align: right; font-size: .875rem; color: var(--ink-dim); padding-bottom: 8px; font-variant-numeric: tabular-nums; }
+.edad b { display: block; font-size: 1.25rem; color: var(--ink); }
+.vida { margin-top: 6px; font-size: 1.25rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.vida .detalle { color: var(--ink-dim); font-weight: 400; font-size: 1rem; }
+.vida.agotada, .vida.agotada .detalle { color: var(--crit-text); font-weight: 700; }
+.vida.oculto { color: var(--nodata); }
+.barra { position: relative; height: 28px; margin-top: 8px; border-radius: 8px; border: 1px solid var(--border); background: #0B2236; overflow: hidden; }
+.barra .relleno-barra {
+  position: absolute; inset: 0; transform-origin: 0 50%; transform: scaleX(0); background: var(--lvl);
+  transition: transform 600ms var(--curva), background-color 600ms var(--curva);
+}
+.barra .marca-barra { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: rgba(232, 241, 248, .35); }
+.marcas-barra { position: relative; height: 16px; font-size: .75rem; color: var(--ink-dim); font-variant-numeric: tabular-nums; }
+.marcas-barra span { position: absolute; top: 1px; transform: translateX(-50%); }
+.origen { margin-top: 4px; font-size: .75rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--attn); }
+.origen.real { color: var(--cyan); }
+.origen.archivo { color: var(--ink-dim); }
+.historial { margin-top: 4px; font-size: .875rem; color: var(--ink-dim); font-variant-numeric: tabular-nums; }
+.historial b { color: var(--ink); font-weight: 600; }
+
+/* ---------- Recomendación ---------- */
+.reco { margin-top: 16px; padding: 14px 28px 12px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 32px; background: linear-gradient(180deg, #102F4A, var(--card-2)); }
+.reco .etiqueta { grid-column: 1; margin: 0; }
+.reco h2 { grid-column: 1; margin: 0; font-size: 2.75rem; line-height: 1.08; letter-spacing: -.02em; }
+.reco h2 .eleccion { box-shadow: inset 0 -6px 0 var(--lvl); }
+.reco h2.neutral { color: var(--nodata); }
+.reco .motivo { grid-column: 1; font-size: 1rem; }
+.reco .niveles { grid-column: 2; grid-row: 1 / span 3; display: flex; gap: 12px; align-items: center; }
+.nivel-mini { border: 1px solid var(--border); border-radius: 10px; padding: 8px 14px; min-width: 148px; }
+.nivel-mini .n { font-size: .75rem; color: var(--ink-dim); font-weight: 700; letter-spacing: .08em; }
+.nivel-mini .s { display: flex; align-items: center; gap: 8px; font-weight: 600; color: var(--lvl); }
+.nivel-mini[data-nivel="critico"] .s { color: var(--crit-text); }
+.nivel-mini[data-nivel="critico"] .s svg { color: var(--crit); }
+.nivel-mini .s svg { width: 20px; height: 20px; }
+.nivel-mini .p { font-size: 1.25rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.reco .aviso-fijo { grid-column: 1 / -1; margin: 6px 0 0; padding-top: 6px; border-top: 1px solid var(--border); font-size: .875rem; color: var(--ink-dim); }
+
+.debajo { display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); gap: 16px; margin-top: 16px; }
+.lista-eventos { list-style: none; margin: 0; padding: 0; }
+.lista-eventos li { display: flex; gap: 10px; padding: 6px 0; border-bottom: 1px solid rgba(62, 81, 98, .55); font-size: .875rem; }
+.lista-eventos li b { color: var(--ink-dim); font-weight: 600; flex: none; font-variant-numeric: tabular-nums; }
+.vacio { color: var(--ink-dim); font-size: .875rem; padding: 12px 0; }
+
+/* =====================================================================
+   GRÁFICA SVG
+   ===================================================================== */
+.grafica-caja { position: relative; }
+.grafica { display: block; width: 100%; height: auto; touch-action: pan-y; }
+.grafica text { font-family: var(--ui); font-size: 12px; fill: var(--ink-dim); font-variant-numeric: tabular-nums; }
+.grafica .eje { stroke: var(--border); stroke-width: 1; }
+.grafica .reticula { stroke: rgba(62, 81, 98, .45); stroke-width: 1; }
+.grafica .banda { fill: rgba(8, 198, 190, .10); }
+.grafica .serie-a { fill: none; stroke: var(--cyan); stroke-width: 2.25; stroke-linejoin: round; }
+.grafica .serie-b { fill: none; stroke: var(--ink); stroke-width: 2.25; stroke-dasharray: 7 5; stroke-linejoin: round; }
+.grafica .marcadores { fill: var(--crit); stroke: var(--ink); stroke-width: 1.5; }
+.grafica .cursor { stroke: var(--ink-dim); stroke-width: 1; }
+.grafica .etq-a { fill: var(--cyan); font-weight: 700; font-size: 13px; }
+.grafica .etq-b { fill: var(--ink); font-weight: 700; font-size: 13px; }
+.grafica-vacia { display: flex; align-items: center; justify-content: center; min-height: 160px; color: var(--ink-dim); text-align: center; padding: 16px; border: 1px dashed var(--border); border-radius: 10px; }
+.tooltip {
+  position: absolute; pointer-events: none; z-index: 5; min-width: 150px; padding: 8px 10px; border-radius: 8px;
+  border: 1px solid var(--border); background: rgba(11, 27, 43, .96); font-size: .8125rem; font-variant-numeric: tabular-nums;
+}
+.controles-grafica { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 12px; }
+.grupo-botones { display: inline-flex; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.grupo-botones button { min-height: 44px; min-width: 44px; padding: 0 12px; border: 0; background: transparent; cursor: pointer; font-weight: 600; font-size: .875rem; }
+.grupo-botones button + button { border-left: 1px solid var(--border); }
+.grupo-botones button[aria-pressed="true"] { background: var(--card); box-shadow: inset 0 -3px 0 var(--cyan); }
+
+/* ---------- Formularios ---------- */
+.campos { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.campo label { display: block; font-size: .875rem; color: var(--ink-dim); margin-bottom: 4px; }
+.campo input, .campo select { width: 100%; min-height: 44px; padding: 0 10px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg); font-variant-numeric: tabular-nums; }
+.error-campo { color: var(--crit-text); font-size: .875rem; min-height: 20px; margin-top: 6px; }
+.rejilla-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 16px; }
+.rejilla-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+
+/* ---------- Tablas ---------- */
+.tabla-caja { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: .875rem; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid rgba(62, 81, 98, .55); vertical-align: top; }
+th { font-size: .75rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-dim); }
+td.estado-activa { color: var(--attn); font-weight: 600; }
+
+/* ---------- Dispositivos ---------- */
+.kv { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 14px; margin: 0; font-size: .875rem; font-variant-numeric: tabular-nums; }
+.kv dt { color: var(--ink-dim); }
+.kv dd { margin: 0; text-align: right; font-weight: 600; overflow-wrap: anywhere; }
+.kv dd.mono { font-family: var(--mono); font-weight: 400; }
+.consola { margin: 0; font: .8125rem/1.55 var(--mono); background: #081521; border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; max-height: 360px; overflow: auto; white-space: pre-wrap; word-break: break-all; }
+.consola .ign { color: var(--ink-dim); }
+.consola .rech { color: var(--crit-text); }
+details > summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; gap: 8px; }
+.nota-demo { padding: 10px 14px; border-radius: 10px; border: 1px solid var(--attn); margin-bottom: 16px; font-size: .875rem; }
+
+/* ---------- Diálogo propio ---------- */
+dialog { max-width: 480px; width: calc(100% - 32px); border: 1px solid var(--border); border-radius: var(--radio); padding: 20px 24px; background: var(--card-2); color: var(--ink); }
+dialog::backdrop { background: rgba(4, 10, 18, .7); }
+dialog h2 { margin: 0 0 8px; font-size: 1.25rem; }
+.botones-dialogo { display: flex; gap: 12px; justify-content: flex-end; flex-wrap: wrap; margin-top: 20px; }
+
+/* ---------- Autopruebas ---------- */
+.autotest { max-width: 1100px; margin: 0 auto; padding: 24px; }
+.pasa { color: var(--ok); font-weight: 700; }
+.falla { color: var(--crit-text); font-weight: 700; }
+
+/* =====================================================================
+   PÁGINA INSTITUCIONAL
+   ===================================================================== */
+.inicio-nav {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 30; display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px;
+  min-height: 60px; padding: 6px max(20px, calc((100% - 1200px) / 2)); border-bottom: 1px solid var(--border);
+  background: rgba(11, 27, 43, .92);
+}
+.inicio-nav a.enlace { color: var(--ink); text-decoration: none; min-height: 44px; display: inline-flex; align-items: center; padding: 0 10px; border-radius: 8px; font-weight: 600; font-size: .9375rem; }
+.inicio-nav a.enlace:hover { color: var(--cyan); }
+.inicio { padding-top: 60px; }
+.seccion { max-width: 1200px; margin: 0 auto; padding: 64px 20px; }
+.seccion h2 { font-size: 1.75rem; margin: 0 0 12px; letter-spacing: -.01em; }
+.seccion p.texto { font-size: 1.125rem; color: var(--ink-dim); max-width: 760px; margin: 0; }
+.hero { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: 40px; align-items: center; padding-top: 48px; }
+.hero h1 { font-size: 3.5rem; line-height: 1.05; letter-spacing: -.03em; margin: 0 0 16px; }
+.grado { background: linear-gradient(90deg, var(--cyan), var(--orange)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.hero .sub { font-size: 1.25rem; color: var(--ink-dim); margin: 0 0 28px; max-width: 520px; }
+.hero .acciones { display: flex; gap: 12px; flex-wrap: wrap; }
+.hero .acciones .btn { min-height: 52px; font-size: 1rem; padding: 0 20px; }
+.mini { position: relative; }
+.mini .insignia { position: absolute; top: -14px; left: 16px; z-index: 2; }
+.mini-marco { border: 1px solid var(--border); border-radius: 18px; padding: 22px 16px 16px; background: rgba(11, 27, 43, .6); }
+.mini .tarjetas { gap: 10px; }
+.mini .tarjeta { padding: 10px 14px 10px; }
+.mini .temp { font-size: 3rem; }
+.mini .temp small { font-size: 1.125rem; }
+.mini .lote { font-size: 1rem; cursor: default; }
+.mini .lote .icono { display: none; }
+.mini .vida { font-size: 1rem; }
+.mini .vida .detalle { font-size: .8125rem; }
+.mini .barra { height: 20px; }
+.mini .edad b { font-size: 1rem; }
+.mini .reco { margin-top: 10px; padding: 12px 16px; grid-template-columns: 1fr; }
+.mini .reco h2 { font-size: 1.5rem; }
+.mini .reco .niveles { display: none; }
+.mini .reco .motivo { font-size: .875rem; }
+.mini .reco .aviso-fijo { font-size: .75rem; }
+.pasos { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-top: 24px; }
+.paso .numero { font-size: 2.75rem; font-weight: 700; color: var(--cyan); line-height: 1; letter-spacing: -.02em; }
+.paso h3 { margin: 12px 0 6px; font-size: 1rem; letter-spacing: .08em; }
+.paso p, .tec p { margin: 0; color: var(--ink-dim); }
+.paso .icono, .tec .icono { width: 32px; height: 32px; color: var(--cyan); }
+.tecnologias { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 24px; }
+.tec { display: flex; gap: 14px; align-items: flex-start; }
+.tec p { color: var(--ink); }
+.limites-caja { border-left: 3px solid var(--attn); }
+.equipo { list-style: none; padding: 0; margin: 16px 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 24px; font-size: 1.0625rem; }
+.cierre { text-align: center; }
+.pie-inicio { border-top: 1px solid var(--border); padding: 24px 20px; text-align: center; color: var(--ink-dim); font-size: .875rem; }
+.entrada { opacity: 0; transform: translateY(8px); transition: opacity 500ms var(--curva), transform 500ms var(--curva); }
+.entrada.visible { opacity: 1; transform: none; }
+
+/* =====================================================================
+   MODO PRESENTACIÓN Y RESPONSIVO
+   ===================================================================== */
+html.presentacion .tablero { grid-template-columns: minmax(0, 1fr); }
+html.presentacion .lateral { display: none; }
+html.presentacion .principal { padding: 12px 20px 20px; }
+
+@media (max-width: 1180px) {
+  .reco { grid-template-columns: minmax(0, 1fr); }
+  .reco .niveles { grid-column: 1; grid-row: auto; margin-top: 8px; flex-wrap: wrap; }
+  .rejilla-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 899px) {
+  .tablero { grid-template-columns: minmax(0, 1fr); }
+  .lateral {
+    position: fixed; top: auto; bottom: 0; left: 0; right: 0; z-index: 25; height: auto; flex-direction: row;
+    justify-content: space-around; gap: 0; padding: 4px; border-right: 0; border-top: 1px solid var(--border); background: rgba(11, 27, 43, .97);
+  }
+  .lateral a { flex-direction: column; gap: 2px; min-height: 56px; padding: 4px 6px; font-size: .6875rem; justify-content: center; }
+  .lateral a[aria-current="page"] { box-shadow: inset 0 3px 0 var(--cyan); }
+  .lateral .version { display: none; }
+  .principal { padding: 12px 16px 88px; }
+  .tarjetas, .debajo, .rejilla-2, .rejilla-3, .hero, .pasos, .tecnologias, .equipo { grid-template-columns: minmax(0, 1fr); }
+  .reco { padding: 14px 18px; }
+  .reco h2 { font-size: 2rem; }
+  .hero h1 { font-size: 2.5rem; }
+  .seccion { padding: 40px 16px; }
+  .barra-sup { padding: 6px 16px; }
+}
+@media (max-width: 480px) {
+  .segmentado button { padding: 0 10px; font-size: .75rem; }
+  .temp { font-size: 4.5rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+  .entrada { opacity: 1; transform: none; }
+}
+
+/* =====================================================================
+   IMPRESIÓN (resumen por carga)
+   ===================================================================== */
+@media print {
+  body { background: #fff; color: #000; }
+  .barra-sup, .lateral, .saltar, .no-imprimir, #vista-inicio, .vista:not(#vista-reportes) { display: none !important; }
+  .tablero { display: block; }
+  .panel { background: #fff; border-color: #999; box-shadow: none; color: #000; }
+  .atenuado, th, .titulo-panel { color: #333; }
+  #imprimible { display: block !important; }
+}
+</style>
+</head>
+<body>
+<a class="saltar" href="#/" id="saltar">Saltar al contenido</a>
+
+<!-- =====================================================================
+     PÁGINA INSTITUCIONAL (#/)
+     ===================================================================== -->
+<div id="vista-inicio" hidden>
+<!--INICIO-->
+  <main id="main-inicio" class="seccion" tabindex="-1"><h1 tabindex="-1">KAIROS DYNAMICS</h1><p><a class="btn primario" href="#/dashboard">Ver Dashboard</a></p></main>
+<!--/INICIO-->
+</div>
+
+<!-- =====================================================================
+     TABLERO (#/dashboard...)
+     ===================================================================== -->
+<div id="tablero" class="tablero" hidden>
+  <header class="barra-sup">
+    <a class="marca" href="#/" title="Ir a la página de inicio"><span class="k">KAIROS</span> <span class="d">DYNAMICS</span></a>
+    <div class="segmentado" role="group" aria-label="Origen de los datos">
+      <button type="button" id="btn-modo-demo" aria-pressed="true">DEMOSTRACIÓN</button>
+      <button type="button" id="btn-modo-real" aria-pressed="false">SENSORES REALES</button>
+    </div>
+    <span class="insignia" id="insignia-origen">Datos simulados</span>
+    <div class="chip-conexion" id="chip" data-estado="DEMO">
+      <span class="punto" aria-hidden="true"></span>
+      <span class="texto-chip" id="chip-texto">Modo demostración · sin hardware</span>
+      <button type="button" class="btn" id="btn-chip" hidden>Conectar por USB</button>
+    </div>
+    <span class="relleno"></span>
+    <button type="button" class="btn fantasma no-imprimir" id="btn-presentacion" aria-pressed="false" title="Modo presentación (tecla P)">Presentación (P)</button>
+  </header>
+
+  <nav class="lateral" aria-label="Secciones del tablero">
+    <a href="#/dashboard" data-ruta="resumen"><svg class="icono" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="5" rx="2"/><rect x="13" y="10" width="8" height="11" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/></svg>Resumen</a>
+    <a href="#/dashboard/cargas" data-ruta="cargas"><svg class="icono" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 7v10l9 4 9-4V7"/><path d="M12 11v10"/></svg>Cargas</a>
+    <a href="#/dashboard/temperatura" data-ruta="temperatura"><svg class="icono" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17l5-6 4 4 8-9"/><path d="M3 21h18"/></svg>Temperatura</a>
+    <a href="#/dashboard/alertas" data-ruta="alertas"><svg class="icono" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5 21 19.5H3z"/><path d="M12 10v4"/><path d="M12 17h.01"/></svg>Alertas</a>
+    <a href="#/dashboard/dispositivos" data-ruta="dispositivos"><svg class="icono" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="6" width="16" height="12" rx="2"/><path d="M8 10h3"/><path d="M8 14h8"/><path d="M9 3v3M15 3v3M9 18v3M15 18v3"/></svg>Dispositivos</a>
+    <a href="#/dashboard/reportes" data-ruta="reportes"><svg class="icono" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l4 4v14H6z"/><path d="M15 3v4h4"/><path d="M9 12h7M9 16h7"/></svg>Reportes</a>
+    <div class="version" id="version"></div>
+  </nav>
+
+  <main class="principal" id="main-tablero" tabindex="-1">
+    <p class="aviso-almacen" id="aviso-almacen" hidden>Sin almacenamiento local: los datos se perderán al cerrar la página</p>
+
+    <!-- ===================== RESUMEN ===================== -->
+    <section class="vista" id="vista-resumen" aria-labelledby="h-resumen">
+      <div class="fila-titulo">
+        <h1 id="h-resumen" tabindex="-1">Resumen</h1>
+        <div id="controles-demo" class="no-imprimir" style="display: contents">
+          <div class="reloj-sim num" aria-label="Tiempo simulado"><small>SIMULADO</small><span id="reloj-sim">T+00:00</span></div>
+          <button type="button" class="btn" id="btn-reproducir"><svg class="icono" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14"/><path d="M16 5v14"/></svg><span>Pausar</span></button>
+          <div class="velocidad" role="group" aria-label="Velocidad de la simulación">
+            <span>1 h =</span>
+            <button type="button" data-velocidad="4" aria-pressed="false">4 s</button>
+            <button type="button" data-velocidad="2" aria-pressed="true">2 s</button>
+            <button type="button" data-velocidad="1" aria-pressed="false">1 s</button>
+          </div>
+          <button type="button" class="btn" id="btn-reiniciar">Reiniciar</button>
+          <label class="solo-lector" for="sel-escenario">Escenario de demostración</label>
+          <select class="btn" id="sel-escenario">
+            <option value="1">Escenario 1</option>
+            <option value="2">Escenario 2</option>
+          </select>
+          <span class="separador" aria-hidden="true"></span>
+          <button type="button" class="btn primario" id="btn-hielera" aria-pressed="false">Abrir hielera</button>
+          <button type="button" class="btn" id="btn-falla-b" aria-pressed="false">Simular falla de sonda B</button>
+        </div>
+        <div id="info-real" class="no-imprimir" style="display: contents" hidden>
+          <span class="meta num" id="inicio-monitoreo">Monitoreo: esperando la primera lectura</span>
+          <span class="relleno"></span>
+          <button type="button" class="btn" id="btn-reiniciar-monitoreo">Reiniciar monitoreo</button>
+        </div>
+      </div>
+
+      <div class="tarjetas" id="resumen-tarjetas"></div>
+      <div id="resumen-reco"></div>
+
+      <div class="debajo">
+        <section class="panel" aria-labelledby="h-graf-resumen">
+          <h2 class="titulo-panel" id="h-graf-resumen">Temperatura</h2>
+          <div id="grafica-resumen"></div>
+        </section>
+        <section class="panel" aria-labelledby="h-ev-resumen">
+          <h2 class="titulo-panel" id="h-ev-resumen">Últimos 5 eventos</h2>
+          <ul class="lista-eventos" id="eventos-resumen"></ul>
+          <p class="vacio" id="eventos-resumen-vacio">Sin eventos todavía.</p>
+        </section>
+      </div>
+    </section>
+
+    <!--VISTAS-->
+  </main>
+</div>
+
+<!-- =====================================================================
+     AUTOPRUEBAS (#/autotest)
+     ===================================================================== -->
+<div id="vista-autotest" hidden>
+  <main class="autotest" id="main-autotest" tabindex="-1">
+    <p><a href="#/dashboard">← Volver al tablero</a></p>
+    <h1 tabindex="-1" id="h-autotest">Autopruebas del modelo y del analizador</h1>
+    <p class="atenuado">Se ejecutan dentro de esta misma página, sin instalar nada. Vectores V1 a V13 de la sección 11 del prompt, más pruebas adicionales del analizador y del simulador.</p>
+    <p id="autotest-resumen" class="mayus"></p>
+    <div class="tabla-caja">
+      <table>
+        <thead><tr><th scope="col">ID</th><th scope="col">Prueba</th><th scope="col">Esperado</th><th scope="col">Obtenido</th><th scope="col">Resultado</th></tr></thead>
+        <tbody id="autotest-cuerpo"></tbody>
+      </table>
+    </div>
+  </main>
+</div>
+
+<!-- =====================================================================
+     PLANTILLAS DE COMPONENTES (se clonan desde JS)
+     ===================================================================== -->
+<template id="plantilla-tarjeta">
+  <article class="panel tarjeta" data-nivel="sin_datos">
+    <div class="t-cabeza">
+      <button type="button" class="lote" title="Editar el nombre del lote"><span class="lote-texto"></span><svg class="icono" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg></button>
+      <span class="aviso-nivel" aria-live="polite"><svg class="icono forma" viewBox="0 0 24 24" aria-hidden="true"></svg><span class="aviso-texto"></span></span>
+    </div>
+    <div class="causas"></div>
+    <div class="t-medida">
+      <div class="temp" data-termico="sin_datos"><span class="temp-valor">--.-</span><small>°C</small></div>
+      <div class="edad"><b class="edad-valor">—</b><span class="edad-etq">sin lecturas</span></div>
+    </div>
+    <div class="vida"><span class="vida-pct">-- %</span> <span class="detalle vida-detalle"></span></div>
+    <div class="barra" role="img" aria-label="Vida útil estimada"><div class="relleno-barra"></div></div>
+    <div class="marcas-barra" aria-hidden="true"></div>
+    <div class="origen"></div>
+    <div class="historial"></div>
+  </article>
+</template>
+
+<template id="plantilla-reco">
+  <section class="panel reco" aria-label="Recomendación de entrega">
+    <div class="etiqueta titulo-panel">Recomendación de entrega</div>
+    <h2 class="reco-titulo" aria-live="polite">—</h2>
+    <div class="motivo"></div>
+    <div class="niveles">
+      <div class="nivel-mini" data-nivel="sin_datos"><div class="n">CARGA A</div><div class="s"><svg class="icono forma" viewBox="0 0 24 24" aria-hidden="true"></svg><span class="s-texto"></span></div><div class="p num">-- %</div></div>
+      <div class="nivel-mini" data-nivel="sin_datos"><div class="n">CARGA B</div><div class="s"><svg class="icono forma" viewBox="0 0 24 24" aria-hidden="true"></svg><span class="s-texto"></span></div><div class="p num">-- %</div></div>
+    </div>
+    <p class="aviso-fijo">Sugerencia basada en una estimación provisional. No certifica la inocuidad ni la calidad del producto.</p>
+  </section>
+</template>
+
+<dialog id="dialogo" aria-labelledby="dialogo-titulo">
+  <h2 id="dialogo-titulo"></h2>
+  <p id="dialogo-texto"></p>
+  <div class="botones-dialogo">
+    <button type="button" class="btn" id="dialogo-cancelar">Cancelar</button>
+    <button type="button" class="btn peligro" id="dialogo-aceptar">Aceptar</button>
+  </div>
+</dialog>
+
+<script>
+(function () {
+'use strict';
+
+/* =====================================================================
+   1. CONFIG
+   Lo que el equipo puede cambiar sin tocar el resto del código.
+   ===================================================================== */
+const CONFIG = Object.freeze({
+  VERSION: '1.0',
+  COMPILADO: '2026-11-25 23:00',          // se actualiza a mano al publicar una versión
+  NUMERO_REGISTRO: '',                    // vacío = no se muestra en ninguna parte
+  NOMBRE_LOTE: Object.freeze({ A: 'KD-LOT-A · Hielera', B: 'KD-LOT-B · Ambiente' }),
+  MODELO_PLACA: 'ESP-32D de 38 pines',
+
+  // Modelo Q10: parámetros PROVISIONALES (sin validación experimental).
+  Q10: 2,
+  TREF_C: 4,
+  LREF_H: 120,
+
+  // Umbrales de vida útil estimada (%) para los niveles de estado.
+  UMBRAL_NORMAL: 60,
+  UMBRAL_ATENCION: 40,
+  UMBRAL_ADVERTENCIA: 20,
+
+  // Rango aceptable de temperatura (editable en la página).
+  LIMITE_MIN_C: 0,
+  LIMITE_MAX_C: 8,
+  LIMITE_EDITABLE_MIN_C: -10,
+  LIMITE_EDITABLE_MAX_C: 40,
+
+  LECTURAS_PARA_CAMBIO: 2,                // histéresis: 2 lecturas consecutivas
+  EMPATE_PUNTOS: 2,                       // diferencia menor = «CARGAS SIMILARES»
+  MOSTRAR_PORCENTAJE_EN_REAL: true,
+
+  BAUDIOS: 115200,
+  RANGO_SONDA_MIN_C: -10,                 // rango de exactitud nominal del DS18B20 (informe p. 8–9)
+  RANGO_SONDA_MAX_C: 85,
+
+  MAX_MUESTRAS_MEMORIA: 20000,            // por nodo (búfer circular)
+  MAX_MUESTRAS_GUARDADAS: 5000,           // por nodo en localStorage
+  MAX_EVENTOS: 500,
+  MAX_LINEAS_CONSOLA: 50,
+  MAX_LINEA_CARACTERES: 4096,
+  PREFIJO_ALMACEN: 'kairos.v1.',
+
+  EQUIPO: Object.freeze([
+    'Liam Misael Alvarez Reyes',
+    'David Elim Duarte Cano',
+    'Alejandro Manzanera Mares',
+    'Victor Rodrigo Vazquez Orozco'
+  ]),
+  LINEA_EVENTO: 'CBTis No. 130 · Durango · Etapa local · 27 de noviembre de 2026'
+});
+
+/* =====================================================================
+   2. MODELO Q10 (funciones puras: no tocan el DOM)
+   Fórmulas del prompt, sección 4, e informe p. 7 y 24–25.
+   ===================================================================== */
+
+// Parámetros activos del modelo. Se copian para que nadie modifique CONFIG.
+function parametrosPorDefecto() {
+  return { q10: CONFIG.Q10, trefC: CONFIG.TREF_C, lrefH: CONFIG.LREF_H };
+}
+
+// f(T) = Q10^((T − Tref)/10): cuántas veces más rápido se desgasta que a Tref.
+function factorQ10(tC, p) {
+  return Math.pow(p.q10, (tC - p.trefC) / 10);
+}
+
+// Horas equivalentes a Tref que consume un tramo de dtH horas a la temperatura tC.
+function integrarTramo(dtH, tC, p) {
+  return dtH * factorQ10(tC, p);
+}
+
+// saldo = max(0, Lref − E0 − E). Nunca negativo.
+function saldoHoras(e0H, eH, p) {
+  return Math.max(0, p.lrefH - e0H - eH);
+}
+
+// vida % = 100 · saldo / Lref.
+function vidaUtilPct(e0H, eH, p) {
+  return 100 * saldoHoras(e0H, eH, p) / p.lrefH;
+}
+
+// Horas de reloj que faltarían si la carga se quedara a tC constante (informe p. 7).
+function horasHastaAgotar(e0H, eH, tC, p) {
+  return saldoHoras(e0H, eH, p) / factorQ10(tC, p);
+}
+
+// Segunda defensa: aunque llegue ok:true, −127 y 85.0 no son mediciones.
+function esLecturaUtil(lectura) {
+  return lectura.ok === true &&
+    typeof lectura.tC === 'number' && Number.isFinite(lectura.tC) &&
+    lectura.tC !== -127 && lectura.tC !== 85;
+}
+
+function medianaDe(valores) {
+  if (valores.length === 0) return NaN;
+  const orden = valores.slice().sort(function (a, b) { return a - b; });
+  const mitad = Math.floor(orden.length / 2);
+  return orden.length % 2 ? orden[mitad] : (orden[mitad - 1] + orden[mitad]) / 2;
+}
+
+// Umbral para decidir si un tramo es una laguna o si un nodo quedó «sin datos»:
+// 3 veces el intervalo observado (mediana de las últimas 10 diferencias), con un
+// mínimo. Para el primer tramo, sin ninguna diferencia medida, se usa opc.inicialH.
+function umbralLagunaH(intervalosH, opc) {
+  if (intervalosH.length === 0) return opc.inicialH;
+  return Math.max(3 * medianaDe(intervalosH.slice(-10)), opc.minimoH);
+}
+
+function crearEstadoIntegracion() {
+  return { ultimaT: null, ultimaValida: null, intervalos: [] };
+}
+
+// Un paso de integración. Se usa igual en el tablero y en las autopruebas.
+// Δt = tiempo entre dos lecturas útiles consecutivas; se aplica la temperatura
+// de la lectura ANTERIOR. Si Δt supera el umbral, el tramo no se integra (laguna).
+function pasoIntegracion(ei, lectura, opc) {
+  const umbral = umbralLagunaH(ei.intervalos, opc);   // se calcula ANTES de sumar este Δt
+  if (ei.ultimaT !== null) {
+    const d = lectura.tH - ei.ultimaT;
+    if (d > 0) {
+      ei.intervalos.push(d);
+      if (ei.intervalos.length > 10) ei.intervalos.shift();
+    }
+  }
+  ei.ultimaT = lectura.tH;
+
+  if (!esLecturaUtil(lectura)) return { tipo: 'invalida', dtH: 0, tPrevC: null, umbralH: umbral };
+
+  let r = { tipo: 'primera', dtH: 0, tPrevC: null, umbralH: umbral };
+  if (ei.ultimaValida) {
+    const dt = lectura.tH - ei.ultimaValida.tH;
+    if (dt > umbral) r = { tipo: 'laguna', dtH: dt, tPrevC: null, umbralH: umbral };
+    else if (dt > 0) r = { tipo: 'integrado', dtH: dt, tPrevC: ei.ultimaValida.tC, umbralH: umbral };
+    else r = { tipo: 'repetida', dtH: 0, tPrevC: null, umbralH: umbral };
+  }
+  ei.ultimaValida = { tH: lectura.tH, tC: lectura.tC };
+  return r;
+}
+
+// Integra una serie completa de lecturas [{tH, tC, ok}] ordenadas por tiempo.
+function integrarSerie(lecturas, p, opc) {
+  const ei = crearEstadoIntegracion();
+  let eH = 0, lagunaH = 0, integradoH = 0;
+  lecturas.forEach(function (l) {
+    const r = pasoIntegracion(ei, l, opc);
+    if (r.tipo === 'integrado') { eH += integrarTramo(r.dtH, r.tPrevC, p); integradoH += r.dtH; }
+    if (r.tipo === 'laguna') lagunaH += r.dtH;
+  });
+  return { eH: eH, lagunaH: lagunaH, integradoH: integradoH };
+}
+
+/* =====================================================================
+   3. ESTADO Y NIVELES (funciones puras)
+   ===================================================================== */
+const ORDEN_NIVEL = { normal: 0, atencion: 1, advertencia: 2, critico: 3 };
+const TEXTO_NIVEL = {
+  normal: 'ESTABLE · CADENA DE FRÍO',
+  atencion: 'ATENCIÓN · VIDA ÚTIL EN DESCENSO',
+  advertencia: 'ADVERTENCIA · PRIORIZAR ENTREGA',
+  critico: 'ALERTA · PRIORIDAD CRÍTICA',
+  sin_datos: 'SIN LECTURA · REVISAR SONDA'
+};
+const NOMBRE_NIVEL = { normal: 'Normal', atencion: 'Atención', advertencia: 'Advertencia', critico: 'Crítico', sin_datos: 'Sin datos' };
+
+function umbralesVida() {
+  return { normal: CONFIG.UMBRAL_NORMAL, atencion: CONFIG.UMBRAL_ATENCION, advertencia: CONFIG.UMBRAL_ADVERTENCIA };
+}
+
+function nivelPorVida(pct, u) {
+  if (pct >= u.normal) return 'normal';
+  if (pct >= u.atencion) return 'atencion';
+  if (pct >= u.advertencia) return 'advertencia';
+  return 'critico';
+}
+
+function estadoTermico(tC, lim) {
+  if (tC > lim.maxC) return 'alta';
+  if (tC < lim.minC) return 'baja';
+  return 'dentro';
+}
+
+function peorNivel(a, b) {
+  return ORDEN_NIVEL[b] > ORDEN_NIVEL[a] ? b : a;
+}
+
+function fmt1(x) { return (Math.round(x * 10) / 10).toFixed(1); }
+
+// Regla central: se entrega primero la carga con MENOR vida útil estimada.
+// a, b: { id, vidaPct (número o null), sinDatos, detalle }
+function recomendarEntrega(a, b, empatePuntos) {
+  const sinA = a.sinDatos || a.vidaPct === null;
+  const sinB = b.sinDatos || b.vidaPct === null;
+  if (sinA || sinB) {
+    let motivo;
+    if (sinA && sinB) motivo = 'Las cargas A y B no tienen una lectura válida reciente.';
+    else {
+      const c = sinA ? a : b;
+      motivo = 'La carga ' + c.id + ' no tiene una lectura válida reciente' + (c.detalle ? ' (' + c.detalle + ')' : '') + '.';
+    }
+    return { tipo: 'no_comparable', titulo: 'NO SE PUEDE COMPARAR', primero: null, diferencia: null, motivo: motivo };
+  }
+  if (a.vidaPct <= 0 && b.vidaPct <= 0) {
+    return { tipo: 'ambas_agotadas', titulo: 'AMBAS AGOTADAS (ESTIMACIÓN)', primero: null, diferencia: 0,
+      motivo: 'Las dos cargas llegaron a 0 % de vida útil estimada: revisar su estado antes de entregarlas.' };
+  }
+  const dif = Math.abs(a.vidaPct - b.vidaPct);
+  if (dif < empatePuntos) {
+    return { tipo: 'similares', titulo: 'CARGAS SIMILARES', primero: null, diferencia: dif,
+      motivo: 'La diferencia es de ' + fmt1(dif) + ' puntos de vida útil estimada (menos de ' + empatePuntos + ').' };
+  }
+  const pri = a.vidaPct < b.vidaPct ? a : b;
+  const motivo = pri.vidaPct <= 0
+    ? 'Vida útil estimada de la carga ' + pri.id + ' agotada: revisar su estado antes de entregarla.'
+    : 'La carga ' + pri.id + ' tiene ' + fmt1(dif) + ' puntos menos de vida útil estimada.';
+  return { tipo: 'primero', titulo: 'Entregar primero: Carga ' + pri.id, primero: pri.id, diferencia: dif, motivo: motivo };
+}
+
+/* =====================================================================
+   4. TRANSPORTES
+   Todos tienen la misma interfaz: start(), stop(), onLine(cb), ahoraH().
+   cb(linea, tiempo) recibe una línea de texto y {tH, marca}: tH son horas en
+   la base de tiempo del transporte y marca es la hora de la laptop (ms) o null.
+   ===================================================================== */
+
+// ---------- 4.1 Demostración (datos SIMULADOS) ----------
+const PASO_SIM_H = 5 / 60;                  // una muestra simulada cada 5 min simulados
+const SEMILLA_DEMO = 20261127;              // semilla fija: misma salida en cada ejecución
+const RUIDO_C = 0.3;                        // ruido uniforme de ±0.3 °C
+
+const ESCENARIOS = Object.freeze({
+  1: Object.freeze({
+    id: 1, nombre: 'Escenario 1: Contraste', duracionH: 12,
+    e0H: { A: 26.4, B: 86.4 },              // 78 % y 28 %: estado inicial simulado
+    estadoInicialSimulado: true,
+    baseC: { A: function () { return 4; }, B: function () { return 24.5; } }
+  }),
+  2: Object.freeze({
+    id: 2, nombre: 'Escenario 2: Ejemplo del informe', duracionH: 14,
+    e0H: { A: 0, B: 0 },
+    estadoInicialSimulado: false,
+    // Informe p. 18: A 10 h a 4 °C y luego 4 h a 24 °C; B 14 h a 4 °C.
+    baseC: { A: function (t) { return t < 10 ? 4 : 24; }, B: function () { return 4; } }
+  })
+});
+
+// Generador pseudoaleatorio con semilla (mulberry32): determinista y breve.
+function mulberry32(semilla) {
+  let a = semilla >>> 0;
+  return function () {
+    a = (a + 0x6D2B79F5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// Simulador puro: produce las mismas líneas NDJSON que el firmware, en una
+// rejilla fija de tiempo simulado. No usa el reloj ni el DOM.
+function crearSimulador(escenario, semilla) {
+  const azar = { A: mulberry32(semilla), B: mulberry32(semilla + 1) };
+  const s = { k: 0, desfaseA: 0, hieleraAbierta: false, fallaB: false, seq: { A: 0, B: 0 } };
+
+  function redondear2(x) { return Math.round(x * 100) / 100; }
+
+  function linea(nodo, tH, tC, ok) {
+    s.seq[nodo] += 1;
+    const obj = { v: 1, type: 'reading', node: nodo, sensor: null };
+    if (ok) { obj.t_c = redondear2(tC); obj.ok = true; }
+    else { obj.t_c = null; obj.ok = false; obj.err = 'disconnected'; }
+    obj.seq = s.seq[nodo];
+    obj.up_ms = Math.round(tH * 3600000);
+    obj.via = nodo === 'A' ? 'local' : 'espnow';
+    return JSON.stringify(obj);
+  }
+
+  // «Abrir hielera»: A tiende a 24 °C con constante de 0.5 h; «Cerrar»: vuelve
+  // a la temperatura del escenario con constante de 1 h. Se suma al escenario.
+  function actualizarHielera(tH) {
+    const objetivo = s.hieleraAbierta ? 24 - escenario.baseC.A(tH) : 0;
+    const tau = s.hieleraAbierta ? 0.5 : 1;
+    s.desfaseA = objetivo + (s.desfaseA - objetivo) * Math.exp(-PASO_SIM_H / tau);
+  }
+
+  return {
+    escenario: escenario,
+    abrirHielera: function (abierta) { s.hieleraAbierta = abierta; },
+    fallarSondaB: function (falla) { s.fallaB = falla; },
+    get hieleraAbierta() { return s.hieleraAbierta; },
+    get fallaB() { return s.fallaB; },
+    // Devuelve todas las líneas con tiempo ≤ tH (sin pasar de la duración).
+    lineasHasta: function (tH) {
+      const salida = [];
+      const limite = Math.min(tH, escenario.duracionH) + 1e-9;
+      while (s.k * PASO_SIM_H <= limite) {
+        const t = s.k * PASO_SIM_H;
+        if (s.k > 0) actualizarHielera(t);
+        // Siempre se consumen los dos números al azar para que la serie no cambie
+        // según los botones que se presionen.
+        const ruidoA = (azar.A() * 2 - 1) * RUIDO_C;
+        const ruidoB = (azar.B() * 2 - 1) * RUIDO_C;
+        salida.push({ tH: t, linea: linea('A', t, escenario.baseC.A(t) + s.desfaseA + ruidoA, true) });
+        salida.push({ tH: t, linea: linea('B', t, escenario.baseC.B(t) + ruidoB, !s.fallaB) });
+        s.k += 1;
+      }
+      return salida;
+    }
+  };
+}
+
+// Transporte de demostración: convierte tiempo real en tiempo simulado
+// (tiempo real transcurrido × velocidad), así un navegador que frena la pestaña
+// no distorsiona la simulación.
+function crearTransporteDemo(escenarioId, segPorHora) {
+  let sim = crearSimulador(ESCENARIOS[escenarioId], SEMILLA_DEMO);
+  let alRecibir = function () {};
+  let corriendo = false, terminado = false;
+  let simAnclaH = 0, perfAncla = 0;
+  let velocidad = segPorHora;
+
+  function ahoraH() {
+    if (!corriendo) return simAnclaH;
+    const t = simAnclaH + (performance.now() - perfAncla) / 1000 / velocidad;
+    return Math.min(t, sim.escenario.duracionH);
+  }
+  function anclar() { simAnclaH = ahoraH(); perfAncla = performance.now(); }
+
+  return {
+    tipo: 'demo',
+    umbralOpc: { minimoH: 0, inicialH: 3 * PASO_SIM_H },
+    onLine: function (cb) { alRecibir = cb; },
+    start: function () { if (!terminado) { anclar(); corriendo = true; } },
+    stop: function () { anclar(); corriendo = false; },
+    ahoraH: ahoraH,
+    tick: function () {
+      const t = ahoraH();
+      sim.lineasHasta(t).forEach(function (l) { alRecibir(l.linea, { tH: l.tH, marca: null }); });
+      if (corriendo && t >= sim.escenario.duracionH) { anclar(); corriendo = false; terminado = true; }
+    },
+    fijarVelocidad: function (seg) { anclar(); velocidad = seg; },
+    get velocidad() { return velocidad; },
+    get corriendo() { return corriendo; },
+    get terminado() { return terminado; },
+    get escenario() { return sim.escenario; },
+    get simulador() { return sim; }
+  };
+}
+
+/* =====================================================================
+   5. ANALIZADOR NDJSON (funciones puras + un divisor de líneas)
+   Reglas en docs/PROTOCOLO.md. Nada de lo que llega se inserta como HTML.
+   ===================================================================== */
+const ERRORES_SONDA = ['disconnected', 'power_on_85', 'no_sensor'];
+const TEXTO_ERROR = {
+  disconnected: 'sin respuesta, −127',
+  power_on_85: 'valor de arranque 85.0',
+  no_sensor: 'no hay sonda conectada',
+  desconocido: 'error desconocido'
+};
+
+// Junta los pedazos que llegan por USB y entrega líneas completas.
+function crearDivisorLineas(maxCaracteres) {
+  let pendiente = '';
+  return {
+    alimentar: function (texto) {
+      pendiente += texto;
+      const partes = pendiente.split('\n');
+      pendiente = partes.pop();
+      let descartadas = 0;
+      const lineas = [];
+      partes.forEach(function (p) {
+        const l = p.endsWith('\r') ? p.slice(0, -1) : p;
+        if (l.length > maxCaracteres) descartadas += 1; else lineas.push(l);
+      });
+      if (pendiente.length > maxCaracteres) { pendiente = ''; descartadas += 1; }
+      return { lineas: lineas, descartadas: descartadas };
+    },
+    reiniciar: function () { pendiente = ''; }
+  };
+}
+
+function textoCorto(x, max) {
+  return typeof x === 'string' ? x.slice(0, max) : null;
+}
+
+function validarLectura(o) {
+  if (o.node !== 'A' && o.node !== 'B') return { clase: 'error', motivo: 'node no es A ni B' };
+  if (typeof o.ok !== 'boolean') return { clase: 'error', motivo: 'ok no es booleano' };
+  const msg = {
+    tipo: 'reading', nodo: o.node,
+    sensor: (typeof o.sensor === 'string' && /^[0-9A-F]{16}$/.test(o.sensor)) ? o.sensor : null,
+    ok: o.ok, tC: null, err: null, defensa: null, avisos: [],
+    seq: (Number.isInteger(o.seq) && o.seq >= 0) ? o.seq : null,
+    upMs: (Number.isInteger(o.up_ms) && o.up_ms >= 0) ? o.up_ms : null,
+    via: (o.via === 'local' || o.via === 'espnow') ? o.via : null,
+    rssi: Number.isInteger(o.rssi) ? o.rssi : null
+  };
+  if (o.ok) {
+    if (typeof o.t_c !== 'number' || !Number.isFinite(o.t_c)) return { clase: 'error', motivo: 't_c no es un número finito' };
+    if (o.t_c === -127) { msg.ok = false; msg.err = 'disconnected'; msg.defensa = 'rechazada: −127 con ok:true'; }
+    else if (o.t_c === 85) { msg.ok = false; msg.err = 'power_on_85'; msg.defensa = 'rechazada: 85.0 con ok:true'; }
+    else {
+      msg.tC = o.t_c;
+      if (o.t_c < CONFIG.RANGO_SONDA_MIN_C || o.t_c > CONFIG.RANGO_SONDA_MAX_C) {
+        msg.avisos.push('fuera del rango nominal de la sonda (−10 a +85 °C)');
+      }
+    }
+  } else {
+    msg.err = ERRORES_SONDA.indexOf(o.err) >= 0 ? o.err : 'desconocido';
+  }
+  return { clase: 'mensaje', msg: msg };
+}
+
+// Analiza UNA línea. Devuelve { clase: 'mensaje'|'ignorada'|'error'|'vacia', motivo, msg }.
+function analizarLinea(texto) {
+  const limpio = String(texto).trim();
+  if (limpio === '') return { clase: 'vacia' };
+  if (limpio.charAt(0) !== '{') return { clase: 'ignorada', motivo: 'no es JSON' };
+  let o;
+  try { o = JSON.parse(limpio); } catch (e) { return { clase: 'error', motivo: 'JSON incompleto o inválido' }; }
+  if (o === null || typeof o !== 'object' || Array.isArray(o)) return { clase: 'error', motivo: 'no es un objeto JSON' };
+  if (o.v !== 1) return { clase: 'ignorada', motivo: 'versión de protocolo no soportada' };
+  if (o.type === 'reading') return validarLectura(o);
+  if (o.type === 'hello') {
+    return { clase: 'mensaje', msg: {
+      tipo: 'hello', nodo: o.node === 'B' ? 'B' : 'A', fw: textoCorto(o.fw, 40), placa: textoCorto(o.board, 40),
+      sondas: Number.isInteger(o.sensors) ? o.sensors : null } };
+  }
+  if (o.type === 'status') {
+    return { clase: 'mensaje', msg: {
+      tipo: 'status', nodo: o.node === 'B' ? 'B' : 'A', par: textoCorto(o.peer, 4),
+      edadParMs: (Number.isInteger(o.peer_age_ms) && o.peer_age_ms >= 0) ? o.peer_age_ms : null } };
+  }
+  return { clase: 'ignorada', motivo: 'tipo desconocido' };
+}
+
+/* =====================================================================
+   6. DETECTOR DE EVENTOS (estado de cada carga, sin DOM)
+   Registra un evento por TRANSICIÓN, nunca uno por lectura. Las alertas por
+   temperatura y las fallas de sonda exigen 2 lecturas consecutivas.
+   ===================================================================== */
+function crearBufferCircular(capacidad) {
+  const datos = new Array(capacidad);
+  let inicio = 0, n = 0;
+  return {
+    // Agrega y, si el búfer estaba lleno, devuelve la muestra que salió.
+    push: function (x) {
+      let salio = null;
+      if (n < capacidad) { datos[(inicio + n) % capacidad] = x; n += 1; }
+      else { salio = datos[inicio]; datos[inicio] = x; inicio = (inicio + 1) % capacidad; }
+      return salio;
+    },
+    get length() { return n; },
+    get: function (i) { return datos[(inicio + i) % capacidad]; },
+    ultimo: function () { return n ? datos[(inicio + n - 1) % capacidad] : null; },
+    forEach: function (fn) { for (let i = 0; i < n; i += 1) fn(datos[(inicio + i) % capacidad], i); },
+    aArreglo: function () { const r = []; for (let i = 0; i < n; i += 1) r.push(datos[(inicio + i) % capacidad]); return r; }
+  };
+}
+
+function crearCanal(id) {
+  return {
+    id: id,
+    // Telemetría del nodo
+    sensor: null, fw: null, placa: null, lecturas: 0, perdidos: 0, reinicios: 0,
+    ultimaSeq: null, ultimoUp: null, ultimaLecturaH: null, ultimaLecturaMarca: null,
+    rssi: null, via: null, silencioActivo: false, eventoSilencio: null,
+    ei: crearEstadoIntegracion(),
+    // Estado de la carga
+    e0H: 0, eH: 0, eFueraBufferH: 0, lagunaH: 0, fueraH: 0, excursiones: 0,
+    ultimaValida: null, ultimoEstadoTermico: null,
+    fueraSeguidas: 0, dentroSeguidas: 0, enExcursion: false, causaExcursion: null, eventoExcursion: null,
+    fallasSeguidas: 0, ultimoErr: null, fallaActiva: false, eventoFalla: null,
+    nivelVida: null, eventoNivel: null, agotada: false,
+    tMin: Infinity, tMax: -Infinity, tSuma: 0, tN: 0,
+    muestras: crearBufferCircular(CONFIG.MAX_MUESTRAS_MEMORIA)
+  };
+}
+
+// opc: { modo, escenario, params, limites, e0H: {A, B}, umbralOpc }
+function crearMonitor(opc) {
+  const m = {
+    modo: opc.modo,
+    escenario: opc.escenario || null,
+    params: Object.assign({}, opc.params),
+    limites: Object.assign({}, opc.limites),
+    umbralOpc: opc.umbralOpc,
+    canales: { A: crearCanal('A'), B: crearCanal('B') },
+    eventos: [],
+    siguienteId: 1,
+    inicioMarca: null,      // hora de la laptop al iniciar el monitoreo (solo real)
+    version: 0              // sube en cada cambio para saber cuándo redibujar
+  };
+  m.canales.A.e0H = opc.e0H ? opc.e0H.A : 0;
+  m.canales.B.e0H = opc.e0H ? opc.e0H.B : 0;
+  return m;
+}
+
+function textoLimites(lim) {
+  return 'Rango ' + formatoNumero(lim.minC, 1) + ' a ' + formatoNumero(lim.maxC, 1) + ' °C';
+}
+
+function formatoNumero(x, dec) {
+  if (typeof x !== 'number' || !Number.isFinite(x)) return '--';
+  return x.toFixed(dec).replace('-', '−');
+}
+
+function agregarEvento(m, t, datos) {
+  const ev = {
+    id: m.siguienteId++,
+    tH: t.tH, marca: t.marca,
+    tipo: datos.tipo, carga: datos.carga || '—',
+    texto: datos.texto, valor: datos.valor || '', recomendacion: datos.recomendacion || '',
+    estado: datos.activa ? 'activa' : 'cerrada',
+    limite: textoLimites(m.limites)
+  };
+  m.eventos.push(ev);
+  if (m.eventos.length > CONFIG.MAX_EVENTOS) m.eventos.shift();
+  m.version += 1;
+  return ev;
+}
+
+function cerrarEvento(ev) { if (ev) ev.estado = 'cerrada'; }
+
+const REC_NIVEL = {
+  normal: 'Sin acción.',
+  atencion: 'Vigilar la carga y planear su entrega.',
+  advertencia: 'Priorizar su entrega.',
+  critico: 'Revisar de inmediato y priorizar su entrega.'
+};
+
+function actualizarNivelVida(m, c, t) {
+  if (!c.ultimaValida) return;                      // sin lecturas no se calcula
+  const pct = vidaUtilPct(c.e0H, c.eH, m.params);
+  const nv = nivelPorVida(pct, umbralesVida());
+  if (nv !== c.nivelVida) {
+    const anterior = c.nivelVida;
+    c.nivelVida = nv;
+    cerrarEvento(c.eventoNivel);
+    c.eventoNivel = null;
+    if (anterior !== null || nv !== 'normal') {
+      c.eventoNivel = agregarEvento(m, t, {
+        tipo: 'Nivel por vida útil', carga: c.id,
+        texto: (anterior === null ? 'Inicia en ' : 'Cambia a ') + NOMBRE_NIVEL[nv] + ' por vida útil estimada',
+        valor: fmt1(pct) + ' %', recomendacion: REC_NIVEL[nv], activa: nv !== 'normal'
+      });
+    }
+  }
+  if (pct <= 0 && !c.agotada) {
+    c.agotada = true;
+    agregarEvento(m, t, { tipo: 'Vida útil agotada', carga: c.id, texto: 'VIDA ÚTIL ESTIMADA AGOTADA', valor: '0.0 %',
+      recomendacion: 'Revisar su estado antes de entregarla.', activa: false });
+  } else if (pct > 0) {
+    c.agotada = false;
+  }
+}
+
+// Procesa una lectura ya validada por el analizador. t = { tH, marca }.
+function registrarLectura(m, msg, t) {
+  const c = m.canales[msg.nodo];
+  const N = CONFIG.LECTURAS_PARA_CAMBIO;
+
+  // --- Telemetría: reinicios y paquetes perdidos (saltos de seq) ---
+  const bajoSeq = msg.seq !== null && c.ultimaSeq !== null && msg.seq < c.ultimaSeq;
+  const bajoUp = msg.upMs !== null && c.ultimoUp !== null && msg.upMs < c.ultimoUp;
+  if (bajoSeq || bajoUp) {
+    c.reinicios += 1;
+    agregarEvento(m, t, { tipo: 'Reinicio de nodo', carga: c.id, texto: 'El Nodo ' + c.id + ' se reinició',
+      valor: 'seq ' + c.ultimaSeq + ' → ' + msg.seq, recomendacion: 'Sin acción: se siguen usando las lecturas nuevas.' });
+  } else if (msg.seq !== null && c.ultimaSeq !== null && msg.seq > c.ultimaSeq + 1) {
+    c.perdidos += msg.seq - c.ultimaSeq - 1;
+  }
+  if (msg.seq !== null) c.ultimaSeq = msg.seq;
+  if (msg.upMs !== null) c.ultimoUp = msg.upMs;
+  c.lecturas += 1;
+  c.ultimaLecturaH = t.tH;
+  c.ultimaLecturaMarca = t.marca;
+  if (msg.sensor) c.sensor = msg.sensor;
+  if (msg.via) c.via = msg.via;
+  if (msg.rssi !== null) c.rssi = msg.rssi;
+  if (m.inicioMarca === null && t.marca !== null) m.inicioMarca = t.marca;
+
+  if (c.silencioActivo) {
+    c.silencioActivo = false;
+    cerrarEvento(c.eventoSilencio);
+    c.eventoSilencio = null;
+    agregarEvento(m, t, { tipo: 'Nodo recuperado', carga: c.id, texto: 'El Nodo ' + c.id + ' volvió a enviar datos', recomendacion: 'Sin acción.' });
+  }
+
+  // --- Integración del modelo ---
+  const lectura = { tH: t.tH, tC: msg.tC, ok: msg.ok };
+  const r = pasoIntegracion(c.ei, lectura, m.umbralOpc);
+  const util = r.tipo !== 'invalida';
+  if (r.tipo === 'integrado') {
+    c.eH += integrarTramo(r.dtH, r.tPrevC, m.params);
+    if (c.ultimoEstadoTermico && c.ultimoEstadoTermico !== 'dentro') c.fueraH += r.dtH;
+  } else if (r.tipo === 'laguna') {
+    c.lagunaH += r.dtH;
+  }
+
+  let est = null;
+  if (!util) {
+    // --- Falla de sonda (2 lecturas seguidas) ---
+    c.fallasSeguidas += 1;
+    c.ultimoErr = msg.err || 'desconocido';
+    if (c.fallasSeguidas >= N && !c.fallaActiva) {
+      c.fallaActiva = true;
+      c.eventoFalla = agregarEvento(m, t, { tipo: 'Falla de sonda', carga: c.id,
+        texto: 'Falla de sonda: ' + TEXTO_ERROR[c.ultimoErr], valor: msg.err || '',
+        recomendacion: 'Revisar el cable de la sonda y la resistencia de 4.7 kΩ.', activa: true });
+    }
+  } else {
+    if (c.fallaActiva) {
+      c.fallaActiva = false;
+      cerrarEvento(c.eventoFalla);
+      c.eventoFalla = null;
+      agregarEvento(m, t, { tipo: 'Sonda recuperada', carga: c.id, texto: 'La sonda volvió a dar lecturas válidas',
+        valor: formatoNumero(msg.tC, 1) + ' °C', recomendacion: 'El tramo sin lecturas queda como datos faltantes.' });
+    }
+    c.fallasSeguidas = 0;
+    c.ultimoErr = null;
+
+    // --- Rango de temperatura (2 lecturas seguidas para abrir y para cerrar) ---
+    est = estadoTermico(msg.tC, m.limites);
+    c.ultimoEstadoTermico = est;
+    if (est !== 'dentro') {
+      c.fueraSeguidas += 1;
+      c.dentroSeguidas = 0;
+      if (!c.enExcursion && c.fueraSeguidas >= N) {
+        c.enExcursion = true;
+        c.causaExcursion = est;
+        c.excursiones += 1;
+        const alta = est === 'alta';
+        c.eventoExcursion = agregarEvento(m, t, { tipo: 'Salida de rango', carga: c.id,
+          texto: 'Carga ' + c.id + (alta ? ' subió a ' : ' bajó a ') + formatoNumero(msg.tC, 1) + ' °C · ' +
+            (alta ? 'pérdida de frío (T > ' + formatoNumero(m.limites.maxC, 1) + ' °C)' : 'frío excesivo (T < ' + formatoNumero(m.limites.minC, 1) + ' °C)'),
+          valor: formatoNumero(msg.tC, 1) + ' °C',
+          recomendacion: alta ? 'Revisar de inmediato y priorizar su entrega.' : 'Revisar de inmediato la carga y el enfriamiento.',
+          activa: true });
+      }
+    } else {
+      c.dentroSeguidas += 1;
+      c.fueraSeguidas = 0;
+      if (c.enExcursion && c.dentroSeguidas >= N) {
+        c.enExcursion = false;
+        c.causaExcursion = null;
+        cerrarEvento(c.eventoExcursion);
+        c.eventoExcursion = null;
+        agregarEvento(m, t, { tipo: 'Regreso al rango', carga: c.id, texto: 'Carga ' + c.id + ' regresó al rango',
+          valor: formatoNumero(msg.tC, 1) + ' °C', recomendacion: 'Sin acción inmediata; la excursión queda en el historial.' });
+      }
+    }
+    c.ultimaValida = { tH: t.tH, tC: msg.tC, marca: t.marca };
+    c.tMin = Math.min(c.tMin, msg.tC);
+    c.tMax = Math.max(c.tMax, msg.tC);
+    c.tSuma += msg.tC;
+    c.tN += 1;
+  }
+
+  // --- Vida útil y nivel ---
+  actualizarNivelVida(m, c, t);
+
+  // --- Muestra para la gráfica, la tabla y el CSV ---
+  const salio = c.muestras.push({
+    tH: t.tH, marca: t.marca, tC: util ? msg.tC : null, ok: util, err: util ? null : (msg.err || 'desconocido'),
+    dtH: r.tipo === 'integrado' ? r.dtH : 0, tPrevC: r.tPrevC, laguna: r.tipo === 'laguna',
+    vida: vidaUtilPct(c.e0H, c.eH, m.params), eH: c.eH, sensor: msg.sensor, seq: msg.seq
+  });
+  // Si el búfer ya estaba lleno, el aporte de la muestra que sale se conserva
+  // para poder recalcular con parámetros nuevos (aproximación documentada).
+  if (salio && salio.dtH > 0) c.eFueraBufferH += integrarTramo(salio.dtH, salio.tPrevC, m.params);
+  m.version += 1;
+}
+
+// Marca «sin datos» a un nodo que dejó de enviar líneas. ahora = { tH, marca }.
+function revisarSilencios(m, ahora) {
+  ['A', 'B'].forEach(function (id) {
+    const c = m.canales[id];
+    if (c.ultimaLecturaH === null || c.silencioActivo) return;
+    const umbral = umbralLagunaH(c.ei.intervalos, m.umbralOpc);
+    if (ahora.tH - c.ultimaLecturaH > umbral) {
+      c.silencioActivo = true;
+      c.eventoSilencio = agregarEvento(m, ahora, { tipo: 'Nodo sin datos', carga: id, texto: 'Nodo ' + id + ' sin datos',
+        recomendacion: id === 'A' ? 'Revisar el cable USB y la alimentación del Nodo A.' : 'Revisar la alimentación del Nodo B y su distancia al Nodo A.',
+        activa: true });
+    }
+  });
+}
+
+// Recalcula E con parámetros nuevos usando los tramos guardados en las muestras.
+function recalcularModelo(m, t) {
+  ['A', 'B'].forEach(function (id) {
+    const c = m.canales[id];
+    let e = c.eFueraBufferH;
+    c.muestras.forEach(function (s) {
+      if (s.dtH > 0) e += integrarTramo(s.dtH, s.tPrevC, m.params);
+      s.eH = e;
+      s.vida = vidaUtilPct(c.e0H, e, m.params);
+    });
+    c.eH = e;
+    actualizarNivelVida(m, c, t);
+  });
+  m.version += 1;
+}
+
+// Vista de una carga para la interfaz (no toca el DOM).
+function vistaCanal(m, id, ahoraH) {
+  const c = m.canales[id];
+  const umbral = umbralLagunaH(c.ei.intervalos, m.umbralOpc);
+  const edadValidaH = c.ultimaValida ? ahoraH - c.ultimaValida.tH : null;
+  const ocultarPct = m.modo === 'real' && !CONFIG.MOSTRAR_PORCENTAJE_EN_REAL;
+
+  let sinDatos = false, detalle = '';
+  if (!c.ultimaValida) { sinDatos = true; detalle = c.lecturas ? 'sin lecturas válidas del Nodo ' + id : 'aún no hay lecturas del Nodo ' + id; }
+  else if (c.fallasSeguidas >= CONFIG.LECTURAS_PARA_CAMBIO) { sinDatos = true; detalle = 'falla de sonda: ' + TEXTO_ERROR[c.ultimoErr || 'desconocido']; }
+  else if (edadValidaH > umbral) {
+    sinDatos = true;
+    const edadNodo = c.ultimaLecturaH !== null ? ahoraH - c.ultimaLecturaH : edadValidaH;
+    detalle = 'Nodo ' + id + ' sin datos ' + (m.modo === 'demo' ? 'desde ' + formatoT(c.ultimaLecturaH, false) : 'hace ' + textoDuracion(edadNodo));
+  }
+
+  const pct = c.ultimaValida || m.modo === 'demo' ? vidaUtilPct(c.e0H, c.eH, m.params) : null;
+  let nivel = 'sin_datos';
+  const causas = [];
+  if (!sinDatos) {
+    nivel = ocultarPct ? 'normal' : nivelPorVida(pct, umbralesVida());
+    if (c.enExcursion) {
+      nivel = 'critico';
+      causas.push(c.causaExcursion === 'alta'
+        ? 'Pérdida de frío (T > ' + formatoNumero(m.limites.maxC, 0) + ' °C)'
+        : 'Frío excesivo (T < ' + formatoNumero(m.limites.minC, 0) + ' °C)');
+    }
+    if (!ocultarPct && pct < CONFIG.UMBRAL_ADVERTENCIA) causas.push(pct <= 0 ? 'Vida útil estimada agotada' : 'Vida útil estimada < ' + CONFIG.UMBRAL_ADVERTENCIA + ' %');
+  }
+
+  let termico = 'sin_datos';
+  if (!sinDatos) {
+    if (c.ultimoEstadoTermico === 'dentro') termico = 'dentro';
+    else termico = c.enExcursion ? 'fuera' : 'fuera1';
+  }
+
+  return {
+    id: id, nivel: nivel, sinDatos: sinDatos, detalle: detalle, causas: causas,
+    tC: c.ultimaValida ? c.ultimaValida.tC : null, termico: termico,
+    edadH: edadValidaH, tUltimaH: c.ultimaValida ? c.ultimaValida.tH : null,
+    vidaPct: ocultarPct ? null : pct, ocultarPct: ocultarPct,
+    saldoH: saldoHoras(c.e0H, c.eH, m.params), eTotalH: c.e0H + c.eH,
+    agotada: pct !== null && pct <= 0,
+    excursiones: c.excursiones, fueraH: c.fueraH, lagunaH: c.lagunaH
+  };
+}
+
+// Duración legible: «12 s», «3 min», «1 h 05 min».
+function textoDuracion(h) {
+  const s = Math.max(0, Math.round(h * 3600));
+  if (s < 60) return s + ' s';
+  const min = Math.round(s / 60);
+  if (min < 60) return min + ' min';
+  return Math.floor(min / 60) + ' h ' + String(min % 60).padStart(2, '0') + ' min';
+}
+
+// Tiempo simulado o de archivo: «T+05:12» (o «T+00:05:12» con segundos).
+function formatoT(h, conSegundos) {
+  if (typeof h !== 'number' || !Number.isFinite(h)) return 'T+--:--';
+  const totalS = Math.max(0, Math.round(h * 3600));
+  const hh = Math.floor(totalS / 3600), mm = Math.floor((totalS % 3600) / 60), ss = totalS % 60;
+  const base = 'T+' + String(hh).padStart(2, '0') + ':' + String(mm).padStart(2, '0');
+  return conSegundos ? base + ':' + String(ss).padStart(2, '0') : base;
+}
+
+/* =====================================================================
+   7. ALMACENAMIENTO Y EXPORTACIÓN
+   Todo acceso a localStorage va dentro de try/catch: en algunas
+   computadoras escolares el almacenamiento está bloqueado.
+   ===================================================================== */
+const almacen = (function () {
+  let disponible = false;
+  try {
+    const k = CONFIG.PREFIJO_ALMACEN + 'prueba';
+    window.localStorage.setItem(k, '1');
+    window.localStorage.removeItem(k);
+    disponible = true;
+  } catch (e) { disponible = false; }
+  return {
+    get disponible() { return disponible; },
+    leer: function (clave) {
+      if (!disponible) return null;
+      try {
+        const t = window.localStorage.getItem(CONFIG.PREFIJO_ALMACEN + clave);
+        return t === null ? null : JSON.parse(t);
+      } catch (e) { return null; }
+    },
+    guardar: function (clave, valor) {
+      if (!disponible) return false;
+      try { window.localStorage.setItem(CONFIG.PREFIJO_ALMACEN + clave, JSON.stringify(valor)); return true; }
+      catch (e) { return false; }
+    },
+    borrarTodo: function () {
+      if (!disponible) return;
+      try {
+        const claves = [];
+        for (let i = 0; i < window.localStorage.length; i += 1) {
+          const k = window.localStorage.key(i);
+          if (k && k.indexOf(CONFIG.PREFIJO_ALMACEN) === 0) claves.push(k);
+        }
+        claves.forEach(function (k) { window.localStorage.removeItem(k); });
+      } catch (e) { /* sin almacenamiento: no hay nada que borrar */ }
+    }
+  };
+})();
+/*ALMACEN-EXTRA*/
+
+/* =====================================================================
+   8. INTERFAZ: rutas, vistas y componentes
+   ===================================================================== */
+function $(id) { return document.getElementById(id); }
+function crear(etiqueta, clase, texto) {
+  const e = document.createElement(etiqueta);
+  if (clase) e.className = clase;
+  if (texto !== undefined) e.textContent = texto;
+  return e;
+}
+function movimientoReducido() {
+  return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+}
+
+const app = {
+  modo: 'demo',                 // 'demo' | 'real'
+  escenarioId: 1,
+  segPorHora: 2,
+  monitor: null,                // monitor activo
+  monitorReal: null,            // se conserva al volver a demostración
+  transporte: null,
+  conexion: 'DEMO',
+  vidPid: null,
+  params: parametrosPorDefecto(),
+  limites: { minC: CONFIG.LIMITE_MIN_C, maxC: CONFIG.LIMITE_MAX_C },
+  nombres: { A: CONFIG.NOMBRE_LOTE.A, B: CONFIG.NOMBRE_LOTE.B },
+  contadores: { lineas: 0, ignoradas: 0, errores: 0, fueraRangoSonda: 0 },
+  consola: [],
+  hello: null, status: null,
+  vista: null,
+  sucio: true, ultimoRender: 0,
+  relojReal: null               // { origenPerf, baseH } para el modo real
+};
+
+// ---------- Tiempo ----------
+function ahoraRealH() {
+  if (!app.relojReal) return 0;
+  return app.relojReal.baseH + (performance.now() - app.relojReal.origenPerf) / 3600000;
+}
+function tiempoActual() {
+  if (app.transporte && app.transporte.ahoraH) return { tH: app.transporte.ahoraH(), marca: app.modo === 'real' && app.transporte.tipo === 'serial' ? Date.now() : null };
+  if (app.modo === 'real') return { tH: ahoraRealH(), marca: Date.now() };
+  return { tH: 0, marca: null };
+}
+function tipoOrigen() {
+  if (app.modo === 'demo') return 'demo';
+  return app.transporte && app.transporte.tipo === 'archivo' ? 'archivo' : 'real';
+}
+function horaLocal(marca, conSegundos) {
+  if (typeof marca !== 'number') return '--:--';
+  const d = new Date(marca);
+  const p = function (n) { return String(n).padStart(2, '0'); };
+  return p(d.getHours()) + ':' + p(d.getMinutes()) + (conSegundos ? ':' + p(d.getSeconds()) : '');
+}
+function fechaHoraLocal(marca) {
+  if (typeof marca !== 'number') return '—';
+  const d = new Date(marca);
+  const p = function (n) { return String(n).padStart(2, '0'); };
+  return p(d.getDate()) + '/' + p(d.getMonth() + 1) + '/' + d.getFullYear() + ' ' + horaLocal(marca, true);
+}
+// Hora de un evento o de una muestra según el origen de los datos.
+function textoHora(tH, marca) {
+  const o = tipoOrigen();
+  if (o === 'demo') return formatoT(tH, false);
+  if (o === 'archivo') return formatoT(tH, true);
+  return fechaHoraLocal(marca);
+}
+
+// ---------- Flujo de datos: línea → analizador → detector ----------
+function reiniciarContadores() {
+  app.contadores = { lineas: 0, ignoradas: 0, errores: 0, fueraRangoSonda: 0 };
+  app.consola = [];
+  app.hello = null;
+  app.status = null;
+}
+
+function agregarConsola(texto, clase, motivo) {
+  app.consola.push({ texto: String(texto).slice(0, 300), clase: clase, motivo: motivo || '' });
+  if (app.consola.length > CONFIG.MAX_LINEAS_CONSOLA) app.consola.shift();
+}
+
+function procesarLinea(linea, tiempo) {
+  if (!app.monitor) return;
+  const r = analizarLinea(linea);
+  if (r.clase === 'vacia') return;
+  app.contadores.lineas += 1;
+  if (r.clase === 'ignorada') app.contadores.ignoradas += 1;
+  if (r.clase === 'error') app.contadores.errores += 1;
+  let motivo = r.motivo || '';
+  if (r.clase === 'mensaje' && r.msg.defensa) motivo = r.msg.defensa;
+  if (r.clase === 'mensaje' && r.msg.avisos && r.msg.avisos.length) { app.contadores.fueraRangoSonda += 1; motivo = r.msg.avisos[0]; }
+  agregarConsola(linea, r.clase === 'mensaje' ? (r.msg.defensa ? 'rech' : '') : 'ign', motivo);
+  if (r.clase !== 'mensaje') { app.sucio = true; return; }
+
+  const msg = r.msg;
+  if (msg.tipo === 'reading') registrarLectura(app.monitor, msg, tiempo);
+  else if (msg.tipo === 'hello') {
+    app.hello = msg;
+    const c = app.monitor.canales[msg.nodo];
+    c.fw = msg.fw; c.placa = msg.placa;
+  } else if (msg.tipo === 'status') app.status = msg;
+  if (app.conexion === 'ESPERANDO') fijarConexion('CONECTADO');
+  app.sucio = true;
+}
+
+/*TRANSPORTES-REALES*/
+
+// ---------- Modos ----------
+function iniciarDemo(escenarioId) {
+  if (app.transporte) app.transporte.stop();
+  const esc = ESCENARIOS[escenarioId];
+  app.escenarioId = escenarioId;
+  const tr = crearTransporteDemo(escenarioId, app.segPorHora);
+  app.monitor = crearMonitor({ modo: 'demo', escenario: esc, params: app.params, limites: app.limites, e0H: esc.e0H, umbralOpc: tr.umbralOpc });
+  reiniciarContadores();
+  app.transporte = tr;
+  tr.onLine(procesarLinea);
+  tr.start();
+  tr.tick();
+  app.sucio = true;
+}
+
+function cambiarModo(modo) {
+  if (modo === app.modo) return;
+  if (modo === 'real') {
+    if (app.transporte) app.transporte.stop();
+    app.transporte = null;
+    app.modo = 'real';
+    entrarModoReal();
+  } else {
+    salirModoReal();
+    app.modo = 'demo';
+    fijarConexion('DEMO');
+    iniciarDemo(app.escenarioId);
+  }
+  app.sucio = true;
+  render(true);
+}
+
+/*MODO-REAL*/
+const UMBRAL_REAL = { minimoH: 10 / 3600, inicialH: 30 / 3600 };
+function entrarModoReal() {
+  if (!app.monitorReal) {
+    app.relojReal = { origenPerf: performance.now(), baseH: 0 };
+    app.monitorReal = crearMonitor({ modo: 'real', params: app.params, limites: app.limites, e0H: { A: 0, B: 0 }, umbralOpc: UMBRAL_REAL });
+  }
+  app.monitor = app.monitorReal;
+  reiniciarContadores();
+  fijarConexion(('serial' in navigator) ? 'DESCONECTADO' : 'SIN_WEBSERIAL');
+}
+function salirModoReal() { /* Etapa 3: cerrar el puerto */ }
+
+function fijarConexion(estado) {
+  app.conexion = estado;
+  app.sucio = true;
+}
+
+// ---------- Formas de nivel (SVG propio, sin innerHTML) ----------
+const NS_SVG = 'http://www.w3.org/2000/svg';
+const FORMAS = {
+  normal: [['circle', { cx: 12, cy: 12, r: 8 }]],
+  atencion: [['path', { d: 'M12 3.5 21 19.5H3z' }], ['path', { d: 'M12 10v4' }], ['path', { d: 'M12 16.6v.4' }]],
+  advertencia: [['path', { d: 'M12 2.5 21.5 12 12 21.5 2.5 12z' }], ['path', { d: 'M12 8v5' }], ['path', { d: 'M12 15.6v.4' }]],
+  critico: [['path', { d: 'M8.3 3h7.4L21 8.3v7.4L15.7 21H8.3L3 15.7V8.3z' }], ['path', { d: 'M12 7.5v5.5' }], ['path', { d: 'M12 16v.5' }]],
+  sin_datos: [['circle', { cx: 12, cy: 12, r: 8, 'stroke-dasharray': '2.5 3' }]]
+};
+const formaPintada = new WeakMap();
+function dibujarForma(svg, nivel) {
+  if (formaPintada.get(svg) === nivel) return;
+  formaPintada.set(svg, nivel);
+  while (svg.firstChild) svg.removeChild(svg.firstChild);
+  FORMAS[nivel].forEach(function (f) {
+    const e = document.createElementNS(NS_SVG, f[0]);
+    Object.keys(f[1]).forEach(function (k) { e.setAttribute(k, f[1][k]); });
+    svg.appendChild(e);
+  });
+}
+
+// ---------- Cifras que cambian con interpolación (300–400 ms) ----------
+const numeros = new WeakMap();
+const animando = new Set();
+let rafNumeros = 0;
+function fijarNumero(el, valor, dec, sufijo) {
+  const est = numeros.get(el) || { mostrado: null, objetivo: null };
+  numeros.set(el, est);
+  if (est.objetivo === valor && est.dec === dec) return;
+  est.objetivo = valor; est.dec = dec; est.sufijo = sufijo || '';
+  if (typeof valor !== 'number' || !Number.isFinite(valor) || typeof est.mostrado !== 'number' || movimientoReducido()) {
+    est.mostrado = valor;
+    animando.delete(el);
+    el.textContent = formatoNumero(valor, dec) + est.sufijo;
+    return;
+  }
+  est.desde = est.mostrado; est.t0 = performance.now();
+  animando.add(el);
+  if (!rafNumeros) rafNumeros = requestAnimationFrame(pasoNumeros);
+}
+function pasoNumeros(ahora) {
+  animando.forEach(function (el) {
+    const est = numeros.get(el);
+    const k = Math.min(1, (ahora - est.t0) / 350);
+    const suave = 1 - Math.pow(1 - k, 3);
+    est.mostrado = est.desde + (est.objetivo - est.desde) * suave;
+    el.textContent = formatoNumero(est.mostrado, est.dec) + est.sufijo;
+    if (k >= 1) { est.mostrado = est.objetivo; animando.delete(el); }
+  });
+  rafNumeros = animando.size ? requestAnimationFrame(pasoNumeros) : 0;
+}
+
+// ---------- Componente: tarjeta de carga ----------
+function crearTarjeta(contenedor, id, editable) {
+  const raiz = $('plantilla-tarjeta').content.firstElementChild.cloneNode(true);
+  const q = function (s) { return raiz.querySelector(s); };
+  const r = {
+    lote: q('.lote'), loteTexto: q('.lote-texto'), aviso: q('.aviso-nivel'), forma: q('.forma'), avisoTexto: q('.aviso-texto'),
+    causas: q('.causas'), temp: q('.temp'), tempValor: q('.temp-valor'), edadValor: q('.edad-valor'), edadEtq: q('.edad-etq'),
+    vida: q('.vida'), vidaPct: q('.vida-pct'), vidaDetalle: q('.vida-detalle'), barra: q('.barra'), relleno: q('.relleno-barra'),
+    marcas: q('.marcas-barra'), origen: q('.origen'), historial: q('.historial')
+  };
+  [CONFIG.UMBRAL_ADVERTENCIA, CONFIG.UMBRAL_ATENCION, CONFIG.UMBRAL_NORMAL].forEach(function (v) {
+    const linea = crear('span', 'marca-barra'); linea.style.left = v + '%'; r.barra.appendChild(linea);
+    const etq = crear('span', '', String(v)); etq.style.left = v + '%'; r.marcas.appendChild(etq);
+  });
+  // Historial: textos fijos y cifras en <b> que se actualizan.
+  const h = { exc: crear('b'), fuera: crear('b'), falt: crear('b'), inc: crear('span') };
+  r.historial.append('Excursiones ', h.exc, ' · Fuera de rango ', h.fuera, ' · Datos faltantes ', h.falt, h.inc);
+
+  if (!editable) {
+    r.lote.tabIndex = -1;
+    r.lote.removeAttribute('title');
+    r.lote.setAttribute('aria-disabled', 'true');
+    r.aviso.removeAttribute('aria-live');
+  } else {
+    r.lote.addEventListener('click', function () { editarNombre(id, r.lote); });
+  }
+  contenedor.appendChild(raiz);
+
+  const cache = {};
+  function fijar(clave, el, prop, valor) { if (cache[clave] !== valor) { cache[clave] = valor; el[prop] = valor; } }
+  function fijarAtr(clave, el, atr, valor) { if (cache[clave] !== valor) { cache[clave] = valor; el.setAttribute(atr, valor); } }
+
+  return {
+    raiz: raiz,
+    // vm: vista de la carga (vistaCanal); ctx: { nombre, origen, claseOrigen, ahoraH }
+    actualizar: function (vm, ctx) {
+      fijar('nombre', r.loteTexto, 'textContent', ctx.nombre);
+      if (cache.nivel !== vm.nivel) {
+        const antes = cache.nivel;
+        cache.nivel = vm.nivel;
+        raiz.setAttribute('data-nivel', vm.nivel);
+        r.avisoTexto.textContent = TEXTO_NIVEL[vm.nivel];
+        dibujarForma(r.forma, vm.nivel);
+        if (vm.nivel === 'critico' && antes && !movimientoReducido()) {
+          r.aviso.classList.remove('pulso');
+          void r.aviso.offsetWidth;            // reinicia la animación (máximo 3 pulsos)
+          r.aviso.classList.add('pulso');
+        }
+      }
+      fijar('causas', r.causas, 'textContent', vm.sinDatos ? vm.detalle : vm.causas.join(' · '));
+      fijarAtr('termico', r.temp, 'data-termico', vm.termico);
+      if (vm.tC === null || vm.sinDatos) { fijarNumero(r.tempValor, null, 1); fijar('tempTxt', r.tempValor, 'textContent', '--.-'); }
+      else { cache.tempTxt = null; fijarNumero(r.tempValor, vm.tC, 1); }
+
+      // Antigüedad de la lectura: «hace 3 s» en real, «T+05:12» en demostración.
+      let edad = '—', etq = 'sin lecturas';
+      if (vm.tUltimaH !== null) {
+        if (ctx.origen === 'demo') { edad = formatoT(vm.tUltimaH, false); etq = vm.sinDatos ? 'última lectura válida' : 'última lectura'; }
+        else if (ctx.origen === 'archivo') { edad = formatoT(vm.tUltimaH, true); etq = 'última lectura del archivo'; }
+        else { edad = 'hace ' + textoDuracion(vm.edadH); etq = vm.sinDatos ? 'última lectura válida' : 'última lectura'; }
+      }
+      fijar('edad', r.edadValor, 'textContent', edad);
+      fijar('edadEtq', r.edadEtq, 'textContent', etq);
+
+      // Vida útil: porcentaje, horas equivalentes y barra.
+      const mostrarPct = !vm.ocultarPct && !vm.sinDatos && vm.vidaPct !== null;
+      if (mostrarPct) {
+        fijarNumero(r.vidaPct, vm.vidaPct, 1, ' %');
+        fijar('detalle', r.vidaDetalle, 'textContent', vm.agotada
+          ? '· VIDA ÚTIL ESTIMADA AGOTADA'
+          : '· ' + formatoNumero(vm.saldoH, 1) + ' h equivalentes a ' + formatoNumero(app.params.trefC, 0) + ' °C');
+      } else {
+        fijarNumero(r.vidaPct, null, 1);
+        fijar('pctTxt', r.vidaPct, 'textContent', '-- %');
+        fijar('detalle', r.vidaDetalle, 'textContent', vm.ocultarPct ? '· porcentaje oculto por configuración' : '· no se calcula sin una lectura válida reciente');
+      }
+      if (mostrarPct) cache.pctTxt = null;
+      fijar('claseVida', r.vida, 'className', 'vida' + (mostrarPct && vm.agotada ? ' agotada' : '') + (mostrarPct ? '' : ' oculto'));
+      const escala = mostrarPct ? Math.max(0, Math.min(1, vm.vidaPct / 100)) : (cache.escala || 0);
+      if (cache.escala !== escala) { cache.escala = escala; r.relleno.style.transform = 'scaleX(' + escala.toFixed(4) + ')'; }
+      fijar('barraGris', r.relleno.style, 'backgroundColor', mostrarPct ? '' : 'var(--nodata)');
+      fijarAtr('barraEtq', r.barra, 'aria-label', mostrarPct ? 'Vida útil estimada: ' + formatoNumero(vm.vidaPct, 1) + ' %' : 'Vida útil estimada: no disponible');
+
+      fijar('origen', r.origen, 'textContent', ctx.origenTexto);
+      fijar('claseOrigen', r.origen, 'className', 'origen ' + ctx.claseOrigen);
+      fijar('exc', h.exc, 'textContent', String(vm.excursiones));
+      fijar('fuera', h.fuera, 'textContent', textoDuracionMin(vm.fueraH));
+      fijar('falt', h.falt, 'textContent', textoDuracionMin(vm.lagunaH));
+      fijar('inc', h.inc, 'textContent', vm.lagunaH > 0 ? ' · estimación incompleta' : '');
+    }
+  };
+}
+
+// «0 min», «12 min», «5 h 12 min» (para historiales).
+function textoDuracionMin(h) {
+  const min = Math.round(h * 60);
+  if (min < 60) return min + ' min';
+  return Math.floor(min / 60) + ' h ' + String(min % 60).padStart(2, '0') + ' min';
+}
+
+// Edición del nombre del lote con un clic; se guarda en localStorage.
+function editarNombre(id, boton) {
+  const entrada = crear('input', 'lote-input');
+  entrada.type = 'text';
+  entrada.maxLength = 40;
+  entrada.value = app.nombres[id];
+  entrada.setAttribute('aria-label', 'Nombre del lote de la carga ' + id);
+  boton.hidden = true;
+  boton.parentNode.insertBefore(entrada, boton);
+  entrada.focus();
+  entrada.select();
+  let terminado = false;
+  function terminar(guardar) {
+    if (terminado) return;
+    terminado = true;
+    if (guardar) {
+      const v = entrada.value.trim();
+      app.nombres[id] = v || CONFIG.NOMBRE_LOTE[id];
+      almacen.guardar('nombres', app.nombres);
+    }
+    entrada.remove();
+    boton.hidden = false;
+    boton.focus();
+    app.sucio = true;
+  }
+  entrada.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') { e.preventDefault(); terminar(true); }
+    if (e.key === 'Escape') { e.preventDefault(); terminar(false); }
+  });
+  entrada.addEventListener('blur', function () { terminar(true); });
+}
+
+// ---------- Componente: recomendación de entrega ----------
+function crearReco(contenedor, mini) {
+  const raiz = $('plantilla-reco').content.firstElementChild.cloneNode(true);
+  const titulo = raiz.querySelector('.reco-titulo');
+  const motivo = raiz.querySelector('.motivo');
+  const minis = raiz.querySelectorAll('.nivel-mini');
+  if (mini) titulo.removeAttribute('aria-live');
+  contenedor.appendChild(raiz);
+  const cache = {};
+  return {
+    actualizar: function (rec, vmA, vmB) {
+      const nivelElegido = rec.primero ? (rec.primero === 'A' ? vmA.nivel : vmB.nivel) : '';
+      const clave = rec.titulo + '|' + nivelElegido;
+      if (cache.titulo !== clave) {
+        cache.titulo = clave;
+        titulo.textContent = '';
+        titulo.className = 'reco-titulo' + (rec.tipo === 'primero' ? '' : ' neutral');
+        if (rec.tipo === 'primero') {
+          const sel = crear('span', 'eleccion', 'Carga ' + rec.primero);
+          sel.setAttribute('data-nivel', nivelElegido);
+          titulo.append('Entregar primero: ', sel);
+        } else {
+          titulo.textContent = rec.titulo;
+        }
+      }
+      if (cache.motivo !== rec.motivo) { cache.motivo = rec.motivo; motivo.textContent = rec.motivo; }
+      [vmA, vmB].forEach(function (vm, i) {
+        const caja = minis[i];
+        if (cache['n' + i] !== vm.nivel) {
+          cache['n' + i] = vm.nivel;
+          caja.setAttribute('data-nivel', vm.nivel);
+          dibujarForma(caja.querySelector('.forma'), vm.nivel);
+          caja.querySelector('.s-texto').textContent = NOMBRE_NIVEL[vm.nivel];
+        }
+        const celda = caja.querySelector('.p');
+        if (vm.vidaPct === null || vm.sinDatos) {
+          fijarNumero(celda, null, 1);
+          if (cache['p' + i] !== '--') { cache['p' + i] = '--'; celda.textContent = '-- %'; }
+        } else {
+          cache['p' + i] = null;
+          fijarNumero(celda, vm.vidaPct, 1, ' %');
+        }
+      });
+    }
+  };
+}
+
+// Calcula lo que muestran las tarjetas y la recomendación para un monitor.
+function calcularResumen(m, ahoraH) {
+  const vmA = vistaCanal(m, 'A', ahoraH);
+  const vmB = vistaCanal(m, 'B', ahoraH);
+  const rec = recomendarEntrega(
+    { id: 'A', vidaPct: vmA.vidaPct, sinDatos: vmA.sinDatos, detalle: vmA.detalle },
+    { id: 'B', vidaPct: vmB.vidaPct, sinDatos: vmB.sinDatos, detalle: vmB.detalle },
+    CONFIG.EMPATE_PUNTOS);
+  if (vmA.ocultarPct && !vmA.sinDatos && !vmB.sinDatos) {
+    rec.tipo = 'no_comparable'; rec.titulo = 'NO SE PUEDE COMPARAR'; rec.primero = null;
+    rec.motivo = 'El porcentaje está oculto por configuración (MOSTRAR_PORCENTAJE_EN_REAL).';
+  }
+  return { vmA: vmA, vmB: vmB, rec: rec };
+}
+
+function textoOrigen(m, id) {
+  const o = tipoOrigen();
+  if (o === 'demo') {
+    const esc = m.escenario;
+    if (esc && esc.estadoInicialSimulado) return 'Datos simulados · estado inicial simulado ' + formatoNumero(vidaUtilPct(esc.e0H[id], 0, app.params), 0) + ' %';
+    return 'Datos simulados';
+  }
+  if (o === 'archivo') return 'Reproducción de archivo · estimación en validación';
+  return 'Estimación en validación · parámetros provisionales';
+}
+
+// ---------- Vista Resumen ----------
+const resumen = { tarjetas: null, reco: null, grafica: null, eventos: [] };
+
+function construirResumen() {
+  const cont = $('resumen-tarjetas');
+  resumen.tarjetas = { A: crearTarjeta(cont, 'A', true), B: crearTarjeta(cont, 'B', true) };
+  resumen.reco = crearReco($('resumen-reco'), false);
+  resumen.grafica = crearGrafica($('grafica-resumen'), { alto: 170, compacta: true });
+  const ul = $('eventos-resumen');
+  for (let i = 0; i < 5; i += 1) {
+    const li = crear('li');
+    const b = crear('b');
+    const s = crear('span');
+    li.append(b, s);
+    li.hidden = true;
+    ul.appendChild(li);
+    resumen.eventos.push({ li: li, hora: b, texto: s });
+  }
+}
+
+function renderResumen() {
+  const m = app.monitor;
+  const ahora = tiempoActual();
+  const r = calcularResumen(m, ahora.tH);
+  const o = tipoOrigen();
+  const claseOrigen = o === 'demo' ? '' : (o === 'archivo' ? 'archivo' : 'real');
+  resumen.tarjetas.A.actualizar(r.vmA, { nombre: app.nombres.A, origen: o, origenTexto: textoOrigen(m, 'A'), claseOrigen: claseOrigen });
+  resumen.tarjetas.B.actualizar(r.vmB, { nombre: app.nombres.B, origen: o, origenTexto: textoOrigen(m, 'B'), claseOrigen: claseOrigen });
+  resumen.reco.actualizar(r.rec, r.vmA, r.vmB);
+
+  // Controles de demostración o datos del monitoreo real.
+  $('controles-demo').hidden = app.modo !== 'demo';
+  $('info-real').hidden = app.modo === 'demo';
+  if (app.modo === 'demo' && app.transporte) {
+    const tr = app.transporte;
+    $('reloj-sim').textContent = formatoT(tr.ahoraH(), false);
+    const btn = $('btn-reproducir');
+    const texto = tr.corriendo ? 'Pausar' : (tr.terminado ? 'Repetir' : 'Reproducir');
+    if (btn.lastElementChild.textContent !== texto) {
+      btn.lastElementChild.textContent = texto;
+      dibujarIconoReproducir(btn.querySelector('svg'), tr.corriendo);
+    }
+    document.querySelectorAll('.velocidad button').forEach(function (b) {
+      b.setAttribute('aria-pressed', String(Number(b.getAttribute('data-velocidad')) === app.segPorHora));
+    });
+    const sim = tr.simulador;
+    $('btn-hielera').textContent = sim.hieleraAbierta ? 'Cerrar hielera' : 'Abrir hielera';
+    $('btn-hielera').setAttribute('aria-pressed', String(sim.hieleraAbierta));
+    $('btn-falla-b').textContent = sim.fallaB ? 'Reconectar sonda B' : 'Simular falla de sonda B';
+    $('btn-falla-b').setAttribute('aria-pressed', String(sim.fallaB));
+    $('sel-escenario').value = String(app.escenarioId);
+  } else if (app.modo === 'real') {
+    $('inicio-monitoreo').textContent = textoInicioMonitoreo();
+  }
+
+  // Gráfica reducida y últimos 5 eventos (debajo de la primera pantalla).
+  pintarGrafica(resumen.grafica, { carga: 'AB', ventanaH: o === 'demo' ? Infinity : 1 });
+  const evs = m.eventos;
+  for (let i = 0; i < 5; i += 1) {
+    const ev = evs[evs.length - 1 - i];
+    const fila = resumen.eventos[i];
+    fila.li.hidden = !ev;
+    if (ev) {
+      fila.hora.textContent = textoHora(ev.tH, ev.marca);
+      fila.texto.textContent = prefijoCarga(ev) + ev.texto;
+    }
+  }
+  $('eventos-resumen-vacio').hidden = evs.length > 0;
+}
+
+// «Carga B · …» salvo que el texto ya nombre la carga o el nodo.
+function prefijoCarga(ev) {
+  if (ev.carga === '—' || /^(Carga|El Nodo|Nodo) /.test(ev.texto)) return '';
+  return 'Carga ' + ev.carga + ' · ';
+}
+
+function textoInicioMonitoreo() {
+  const m = app.monitor;
+  if (!m || m.inicioMarca === null) return 'Monitoreo: esperando la primera lectura';
+  return 'Monitoreo desde el ' + fechaHoraLocal(m.inicioMarca) + ' · el porcentaje cuenta solo desde esa hora';
+}
+
+function dibujarIconoReproducir(svg, corriendo) {
+  while (svg.firstChild) svg.removeChild(svg.firstChild);
+  const p = document.createElementNS(NS_SVG, 'path');
+  p.setAttribute('d', corriendo ? 'M8 5v14M16 5v14' : 'M7 4.5v15l12-7.5z');
+  svg.appendChild(p);
+}
+
+// ---------- Barra superior ----------
+const TEXTO_CONEXION = {
+  DEMO: 'Modo demostración · sin hardware',
+  SIN_WEBSERIAL: 'Este navegador no permite USB. Abra la página en Chrome o Edge',
+  DESCONECTADO: 'USB desconectado',
+  CONECTANDO: 'Conectando… elija el puerto en la ventana del navegador',
+  ESPERANDO: 'USB conectado · esperando datos del Nodo A',
+  CONECTADO: 'USB conectado',
+  PERDIDA: 'Se perdió la conexión USB',
+  ARCHIVO: 'Reproduciendo archivo · sin hardware'
+};
+
+function renderBarraSup() {
+  const demo = app.modo === 'demo';
+  $('btn-modo-demo').setAttribute('aria-pressed', String(demo));
+  $('btn-modo-real').setAttribute('aria-pressed', String(!demo));
+  const ins = $('insignia-origen');
+  const o = tipoOrigen();
+  ins.hidden = o === 'real';
+  if (o === 'demo') { ins.textContent = 'Datos simulados · ' + app.monitor.escenario.nombre; ins.className = 'insignia'; }
+  if (o === 'archivo') { ins.textContent = 'Reproducción de archivo · ' + (app.transporte.nombre || ''); ins.className = 'insignia archivo'; }
+  const chip = $('chip');
+  chip.setAttribute('data-estado', app.conexion);
+  let texto = TEXTO_CONEXION[app.conexion] || '';
+  if (app.conexion === 'CONECTADO' && app.vidPid) texto = 'USB conectado · VID:PID ' + app.vidPid;
+  if (app.conexion === 'ESPERANDO' && app.transporte && app.transporte.abiertoDesde && performance.now() - app.transporte.abiertoDesde > 10000) {
+    texto = 'USB conectado · sin datos del Nodo A: revise el firmware y 115200 baudios';
+  }
+  if ($('chip-texto').textContent !== texto) $('chip-texto').textContent = texto;
+  const accion = $('btn-chip');
+  let etiqueta = '';
+  if (app.conexion === 'DESCONECTADO') etiqueta = 'Conectar por USB';
+  if (app.conexion === 'PERDIDA') etiqueta = 'Reconectar';
+  if (app.conexion === 'CONECTADO' || app.conexion === 'ESPERANDO') etiqueta = 'Desconectar';
+  if (app.conexion === 'ARCHIVO') etiqueta = 'Detener';
+  accion.hidden = !etiqueta;
+  if (accion.textContent !== etiqueta) accion.textContent = etiqueta;
+}
+
+// ---------- Render general ----------
+function render(forzar) {
+  if (!app.monitor || !app.vista || app.vista === 'inicio' || app.vista === 'autotest') return;
+  renderBarraSup();
+  $('aviso-almacen').hidden = almacen.disponible || app.modo !== 'real';
+  if (app.vista === 'resumen') renderResumen();
+  /*RENDER-VISTAS*/
+  app.sucio = false;
+  app.ultimoRender = performance.now();
+}
+
+// ---------- Rutas ----------
+const RUTAS = {
+  '#/': 'inicio',
+  '#/dashboard': 'resumen',
+  '#/dashboard/cargas': 'cargas',
+  '#/dashboard/temperatura': 'temperatura',
+  '#/dashboard/alertas': 'alertas',
+  '#/dashboard/dispositivos': 'dispositivos',
+  '#/dashboard/reportes': 'reportes',
+  '#/autotest': 'autotest'
+};
+const TITULO_VISTA = { inicio: 'Inicio', resumen: 'Resumen', cargas: 'Cargas', temperatura: 'Temperatura', alertas: 'Alertas', dispositivos: 'Dispositivos', reportes: 'Reportes', autotest: 'Autopruebas' };
+
+let rutaYaAplicada = false;
+function aplicarRuta() {
+  const hash = location.hash && location.hash !== '#' ? location.hash : '#/';
+  let destino = RUTAS[hash];
+  if (destino && destino !== 'inicio' && destino !== 'autotest' && !$('vista-' + destino)) destino = null;
+  if (!destino) { location.replace('#/dashboard'); return; }   // ruta desconocida → Resumen
+
+  const enTablero = destino !== 'inicio' && destino !== 'autotest';
+  $('vista-inicio').hidden = destino !== 'inicio';
+  $('vista-autotest').hidden = destino !== 'autotest';
+  $('tablero').hidden = !enTablero;
+  if (destino !== 'resumen' && document.documentElement.classList.contains('presentacion')) alternarPresentacion(false);
+  document.querySelectorAll('.vista').forEach(function (v) { v.hidden = v.id !== 'vista-' + destino; });
+  document.querySelectorAll('.lateral a').forEach(function (a) {
+    if (a.getAttribute('data-ruta') === destino) a.setAttribute('aria-current', 'page');
+    else a.removeAttribute('aria-current');
+  });
+  app.vista = destino;
+  document.title = TITULO_VISTA[destino] + ' · KAIROS DYNAMICS';
+  if (destino === 'autotest') pintarAutopruebas();
+  /*RUTA-EXTRA*/
+  app.sucio = true;
+  render(true);
+
+  // Al navegar, el foco pasa al título principal de la vista.
+  const contenedor = destino === 'inicio' ? $('vista-inicio') : (destino === 'autotest' ? $('vista-autotest') : $('vista-' + destino));
+  const h1 = contenedor.querySelector('h1');
+  window.scrollTo(0, 0);
+  if (h1 && rutaYaAplicada) h1.focus({ preventScroll: true });
+  rutaYaAplicada = true;
+}
+
+function mainActual() {
+  if (app.vista === 'inicio') return $('main-inicio');
+  if (app.vista === 'autotest') return $('main-autotest');
+  return $('main-tablero');
+}
+
+// ---------- Modo presentación ----------
+function alternarPresentacion(forzar) {
+  const raiz = document.documentElement;
+  const activo = typeof forzar === 'boolean' ? forzar : !raiz.classList.contains('presentacion');
+  raiz.classList.toggle('presentacion', activo);
+  $('btn-presentacion').setAttribute('aria-pressed', String(activo));
+  if (activo) {
+    if (location.hash !== '#/dashboard') location.hash = '#/dashboard';
+    try {
+      if (document.fullscreenEnabled && !document.fullscreenElement) {
+        const p = raiz.requestFullscreen();
+        if (p && p.catch) p.catch(function () { /* el navegador puede negarlo: no pasa nada */ });
+      }
+    } catch (e) { /* sin pantalla completa */ }
+  } else if (document.fullscreenElement) {
+    try { const p = document.exitFullscreen(); if (p && p.catch) p.catch(function () {}); } catch (e) { /* nada */ }
+  }
+  app.sucio = true;
+}
+
+// ---------- Eventos de la interfaz ----------
+function esCampoDeTexto(el) {
+  return el && (el.tagName === 'INPUT' || el.tagName === 'SELECT' || el.tagName === 'TEXTAREA' || el.isContentEditable);
+}
+
+function enlazarInterfaz() {
+  $('saltar').addEventListener('click', function (e) { e.preventDefault(); mainActual().focus(); });
+  window.addEventListener('hashchange', aplicarRuta);
+
+  $('btn-modo-demo').addEventListener('click', function () { cambiarModo('demo'); });
+  $('btn-modo-real').addEventListener('click', function () { cambiarModo('real'); });
+  $('btn-presentacion').addEventListener('click', function () { alternarPresentacion(); });
+  document.addEventListener('fullscreenchange', function () {
+    if (!document.fullscreenElement && document.documentElement.classList.contains('presentacion')) alternarPresentacion(false);
+  });
+
+  $('btn-reproducir').addEventListener('click', function () {
+    const tr = app.transporte;
+    if (!tr || app.modo !== 'demo') return;
+    if (tr.terminado) iniciarDemo(app.escenarioId);
+    else if (tr.corriendo) tr.stop();
+    else tr.start();
+    app.sucio = true;
+  });
+  document.querySelectorAll('.velocidad button').forEach(function (b) {
+    b.addEventListener('click', function () {
+      app.segPorHora = Number(b.getAttribute('data-velocidad'));
+      if (app.transporte && app.transporte.fijarVelocidad) app.transporte.fijarVelocidad(app.segPorHora);
+      app.sucio = true;
+    });
+  });
+  $('btn-reiniciar').addEventListener('click', function () { iniciarDemo(app.escenarioId); });
+  $('sel-escenario').addEventListener('change', function (e) { iniciarDemo(Number(e.target.value)); });
+  $('btn-hielera').addEventListener('click', function () {
+    if (app.modo !== 'demo') return;
+    const sim = app.transporte.simulador;
+    sim.abrirHielera(!sim.hieleraAbierta);
+    agregarEvento(app.monitor, tiempoActual(), { tipo: 'Acción de demostración', carga: 'A',
+      texto: sim.hieleraAbierta ? 'Hielera abierta (simulación)' : 'Hielera cerrada (simulación)' });
+    app.sucio = true;
+  });
+  $('btn-falla-b').addEventListener('click', function () {
+    if (app.modo !== 'demo') return;
+    const sim = app.transporte.simulador;
+    sim.fallarSondaB(!sim.fallaB);
+    agregarEvento(app.monitor, tiempoActual(), { tipo: 'Acción de demostración', carga: 'B',
+      texto: sim.fallaB ? 'Falla de sonda B simulada' : 'Sonda B reconectada (simulación)' });
+    app.sucio = true;
+  });
+
+  // Atajos: P presentación; Espacio pausa o reanuda; R reinicia la demostración.
+  document.addEventListener('keydown', function (e) {
+    if (e.ctrlKey || e.metaKey || e.altKey || esCampoDeTexto(e.target)) return;
+    if ($('tablero').hidden) return;
+    const tecla = e.key.toLowerCase();
+    if (tecla === 'p') { e.preventDefault(); alternarPresentacion(); }
+    if (app.modo !== 'demo') return;
+    if (tecla === ' ' && (e.target === document.body || e.target === mainActual() || e.target.tagName === 'H1')) {
+      e.preventDefault();
+      $('btn-reproducir').click();
+    }
+    if (tecla === 'r') { e.preventDefault(); iniciarDemo(app.escenarioId); }
+  });
+  /*ENLACES-EXTRA*/
+}
+
+// ---------- Bucle de dibujo (≤ 30 cuadros por segundo) ----------
+let ultimoCuadro = 0;
+function bucle(ahora) {
+  requestAnimationFrame(bucle);
+  if (ahora - ultimoCuadro < 33) return;
+  ultimoCuadro = ahora;
+  avanzar();
+  /*BUCLE-EXTRA*/
+  // Se redibuja si cambió algo o cada segundo (para «hace N s»).
+  if (app.sucio || (app.monitor && app.monitor.version !== app.versionPintada) || ahora - app.ultimoRender > 1000) {
+    if (app.monitor) app.versionPintada = app.monitor.version;
+    render(false);
+  }
+}
+// Avanza la simulación y revisa silencios. También corre con setInterval para
+// que una pestaña en segundo plano siga registrando lo que llega por USB.
+function avanzar() {
+  if (app.transporte && app.transporte.tick) app.transporte.tick();
+  if (app.monitor && (app.modo === 'demo' || app.transporte)) revisarSilencios(app.monitor, tiempoActual());
+}
+
+/* =====================================================================
+   9. GRÁFICA SVG (sin librerías)
+   Los elementos se crean una sola vez y luego solo se cambian sus
+   atributos: el DOM no crece con el tiempo.
+   ===================================================================== */
+const MAX_PUNTOS_SERIE = 600;
+
+function svgEl(etiqueta, atributos, padre) {
+  const e = document.createElementNS(NS_SVG, etiqueta);
+  Object.keys(atributos || {}).forEach(function (k) { e.setAttribute(k, atributos[k]); });
+  if (padre) padre.appendChild(e);
+  return e;
+}
+
+// Prepara una serie: ventana de tiempo, cortes en lagunas y lecturas inválidas,
+// diezmado mínimo/máximo por cubeta y marcadores fuera de rango (límites ACTUALES).
+function prepararSerie(muestras, x0, x1, lim, maxPuntos) {
+  const segmentos = [];
+  let actual = [];
+  let n = 0;
+  muestras.forEach(function (s) {
+    if (s.tH < x0 || s.tH > x1) return;
+    if (!s.ok || s.laguna) { if (actual.length) segmentos.push(actual); actual = []; }
+    if (s.ok) { actual.push(s); n += 1; }
+  });
+  if (actual.length) segmentos.push(actual);
+
+  const cubeta = Math.max(1, Math.ceil(n / (maxPuntos / 2)));
+  const salida = [];
+  const marcadores = [];
+  segmentos.forEach(function (seg) {
+    const puntos = [];
+    for (let i = 0; i < seg.length; i += cubeta) {
+      const trozo = seg.slice(i, i + cubeta);
+      let iMin = 0, iMax = 0, peor = null;
+      trozo.forEach(function (s, j) {
+        if (s.tC < trozo[iMin].tC) iMin = j;
+        if (s.tC > trozo[iMax].tC) iMax = j;
+        const fuera = s.tC > lim.maxC ? s.tC - lim.maxC : (s.tC < lim.minC ? lim.minC - s.tC : 0);
+        if (fuera > 0 && (!peor || fuera > peor.d)) peor = { d: fuera, s: s };
+      });
+      if (cubeta === 1) puntos.push({ x: trozo[0].tH, y: trozo[0].tC });
+      else {
+        const a = Math.min(iMin, iMax), b = Math.max(iMin, iMax);
+        puntos.push({ x: trozo[a].tH, y: trozo[a].tC });
+        if (b !== a) puntos.push({ x: trozo[b].tH, y: trozo[b].tC });
+      }
+      if (peor) marcadores.push({ x: peor.s.tH, y: peor.s.tC });
+    }
+    salida.push(puntos);
+  });
+  return { segmentos: salida, marcadores: marcadores, n: n };
+}
+
+function pasoBonito(rango, objetivo) {
+  const bruto = rango / Math.max(1, objetivo);
+  const pot = Math.pow(10, Math.floor(Math.log10(bruto)));
+  const f = bruto / pot;
+  return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * pot;
+}
+const PASOS_TIEMPO_H = [1 / 3600 * 10, 1 / 60, 2 / 60, 5 / 60, 10 / 60, 0.25, 0.5, 1, 2, 3, 6, 12, 24, 48];
+
+function crearGrafica(contenedor, opc) {
+  const alto = opc.alto || 260;
+  const caja = crear('div', 'grafica-caja');
+  const vacio = crear('div', 'grafica-vacia', 'Sin datos todavía.');
+  const tip = crear('div', 'tooltip');
+  tip.hidden = true;
+  const tipLineas = [crear('div', 'mayus'), crear('div'), crear('div')];
+  tipLineas.forEach(function (l) { tip.appendChild(l); });
+  const svg = svgEl('svg', { class: 'grafica', role: 'img', 'aria-label': 'Gráfica de temperatura' });
+  const gRet = svgEl('g', {}, svg);
+  const banda = svgEl('rect', { class: 'banda' }, svg);
+  const ejeX = svgEl('line', { class: 'eje' }, svg);
+  const ejeY = svgEl('line', { class: 'eje' }, svg);
+  const serieA = svgEl('path', { class: 'serie-a' }, svg);
+  const serieB = svgEl('path', { class: 'serie-b' }, svg);
+  const marcas = svgEl('path', { class: 'marcadores' }, svg);
+  const etqA = svgEl('text', { class: 'etq-a' }, svg);
+  const etqB = svgEl('text', { class: 'etq-b' }, svg);
+  const unidadY = svgEl('text', {}, svg);
+  const unidadX = svgEl('text', { 'text-anchor': 'end' }, svg);
+  const cursor = svgEl('line', { class: 'cursor', visibility: 'hidden' }, svg);
+  const area = svgEl('rect', { fill: 'transparent' }, svg);
+  const ticksX = [], ticksY = [];
+  for (let i = 0; i < 9; i += 1) {
+    ticksX.push({ l: svgEl('line', { class: 'reticula' }, gRet), t: svgEl('text', { 'text-anchor': 'middle' }, gRet) });
+    ticksY.push({ l: svgEl('line', { class: 'reticula' }, gRet), t: svgEl('text', { 'text-anchor': 'end' }, gRet) });
+  }
+  caja.append(svg, vacio, tip);
+  contenedor.appendChild(caja);
+
+  const M = { izq: 46, der: opc.compacta ? 64 : 72, arr: 14, aba: 30 };
+  let ancho = Math.max(280, contenedor.clientWidth || 600);
+  let ultimo = null;   // últimos datos dibujados (para el cursor)
+
+  if (window.ResizeObserver) {
+    new ResizeObserver(function (ent) {
+      const w = Math.round(ent[0].contentRect.width);
+      if (w > 0 && Math.abs(w - ancho) > 2) { ancho = Math.max(280, w); if (ultimo) dibujar(ultimo); }
+    }).observe(contenedor);
+  }
+
+  function escalas(d) {
+    const sx = function (x) { return M.izq + (x - d.x0) / Math.max(1e-9, d.x1 - d.x0) * (ancho - M.izq - M.der); };
+    const sy = function (y) { return M.arr + (d.y1 - y) / Math.max(1e-9, d.y1 - d.y0) * (alto - M.arr - M.aba); };
+    return { sx: sx, sy: sy };
+  }
+
+  function caminos(segs, e) {
+    let d = '';
+    segs.forEach(function (seg) {
+      seg.forEach(function (p, i) { d += (i ? 'L' : 'M') + e.sx(p.x).toFixed(1) + ' ' + e.sy(p.y).toFixed(1); });
+    });
+    return d;
+  }
+
+  function dibujar(d) {
+    ultimo = d;
+    const hay = d.series.some(function (s) { return s.visible && s.prep.n > 0; });
+    svg.style.display = hay ? '' : 'none';
+    vacio.hidden = hay;
+    if (!hay) { vacio.textContent = d.textoVacio; tip.hidden = true; return; }
+    svg.setAttribute('viewBox', '0 0 ' + ancho + ' ' + alto);
+    svg.setAttribute('width', ancho);
+    svg.setAttribute('height', alto);
+    const e = escalas(d);
+
+    // Retícula y etiquetas del eje Y (°C)
+    const pasoY = pasoBonito(d.y1 - d.y0, 5);
+    let i = 0;
+    for (let v = Math.ceil(d.y0 / pasoY) * pasoY; v <= d.y1 + 1e-9 && i < ticksY.length; v += pasoY, i += 1) {
+      const y = e.sy(v).toFixed(1);
+      ticksY[i].l.setAttribute('x1', M.izq); ticksY[i].l.setAttribute('x2', ancho - M.der);
+      ticksY[i].l.setAttribute('y1', y); ticksY[i].l.setAttribute('y2', y);
+      ticksY[i].t.setAttribute('x', M.izq - 6); ticksY[i].t.setAttribute('y', Number(y) + 4);
+      ticksY[i].t.textContent = formatoNumero(v, pasoY < 1 ? 1 : 0);
+      ticksY[i].l.style.display = ticksY[i].t.style.display = '';
+    }
+    for (; i < ticksY.length; i += 1) ticksY[i].l.style.display = ticksY[i].t.style.display = 'none';
+
+    // Retícula y etiquetas del eje X (tiempo)
+    const maxTicks = Math.max(2, Math.floor((ancho - M.izq - M.der) / 110));
+    const rangoX = d.x1 - d.x0;
+    let pasoX = PASOS_TIEMPO_H[PASOS_TIEMPO_H.length - 1];
+    for (let k = 0; k < PASOS_TIEMPO_H.length; k += 1) { if (rangoX / PASOS_TIEMPO_H[k] <= maxTicks) { pasoX = PASOS_TIEMPO_H[k]; break; } }
+    i = 0;
+    for (let v = Math.ceil(d.x0 / pasoX - 1e-9) * pasoX; v <= d.x1 + 1e-9 && i < ticksX.length; v += pasoX, i += 1) {
+      const x = e.sx(v).toFixed(1);
+      ticksX[i].l.setAttribute('x1', x); ticksX[i].l.setAttribute('x2', x);
+      ticksX[i].l.setAttribute('y1', M.arr); ticksX[i].l.setAttribute('y2', alto - M.aba);
+      ticksX[i].t.setAttribute('x', x); ticksX[i].t.setAttribute('y', alto - M.aba + 18);
+      ticksX[i].t.textContent = d.formatoX(v, pasoX < 1 / 60);
+      ticksX[i].l.style.display = ticksX[i].t.style.display = '';
+    }
+    for (; i < ticksX.length; i += 1) ticksX[i].l.style.display = ticksX[i].t.style.display = 'none';
+
+    ejeX.setAttribute('x1', M.izq); ejeX.setAttribute('x2', ancho - M.der);
+    ejeX.setAttribute('y1', alto - M.aba); ejeX.setAttribute('y2', alto - M.aba);
+    ejeY.setAttribute('x1', M.izq); ejeY.setAttribute('x2', M.izq);
+    ejeY.setAttribute('y1', M.arr); ejeY.setAttribute('y2', alto - M.aba);
+    unidadY.setAttribute('x', 4); unidadY.setAttribute('y', M.arr + 2); unidadY.textContent = '°C';
+    unidadX.setAttribute('x', ancho - 4); unidadX.setAttribute('y', alto - 4); unidadX.textContent = d.unidadX;
+
+    // Banda del rango aceptable
+    const yMax = e.sy(Math.min(d.lim.maxC, d.y1)), yMin = e.sy(Math.max(d.lim.minC, d.y0));
+    banda.setAttribute('x', M.izq); banda.setAttribute('width', Math.max(0, ancho - M.izq - M.der));
+    banda.setAttribute('y', yMax.toFixed(1)); banda.setAttribute('height', Math.max(0, yMin - yMax).toFixed(1));
+
+    // Series, etiquetas directas y marcadores
+    let marcasD = '';
+    const r = opc.compacta ? 3.5 : 4.5;
+    [[d.series[0], serieA, etqA], [d.series[1], serieB, etqB]].forEach(function (par) {
+      const s = par[0], camino = par[1], etq = par[2];
+      if (!s.visible || s.prep.n === 0) { camino.setAttribute('d', ''); etq.textContent = ''; return; }
+      camino.setAttribute('d', caminos(s.prep.segmentos, e));
+      const segs = s.prep.segmentos;
+      const ult = segs[segs.length - 1][segs[segs.length - 1].length - 1];
+      etq.setAttribute('x', (e.sx(ult.x) + 8).toFixed(1));
+      etq.setAttribute('y', (e.sy(ult.y) + 4 + (s.id === 'B' ? 0 : 0)).toFixed(1));
+      etq.textContent = 'Carga ' + s.id;
+      s.prep.marcadores.forEach(function (p) {
+        const x = e.sx(p.x), y = e.sy(p.y);
+        marcasD += 'M' + (x - r).toFixed(1) + ' ' + y.toFixed(1) + 'a' + r + ' ' + r + ' 0 1 0 ' + (2 * r) + ' 0a' + r + ' ' + r + ' 0 1 0 ' + (-2 * r) + ' 0';
+      });
+    });
+    // Si las dos etiquetas quedan encimadas, se separan.
+    if (etqA.textContent && etqB.textContent) {
+      const ya = Number(etqA.getAttribute('y')), yb = Number(etqB.getAttribute('y'));
+      if (Math.abs(ya - yb) < 14) { etqA.setAttribute('y', (Math.min(ya, yb) - 7).toFixed(1)); etqB.setAttribute('y', (Math.max(ya, yb) + 7).toFixed(1)); if (ya > yb) { etqA.setAttribute('y', (Math.max(ya, yb) + 7).toFixed(1)); etqB.setAttribute('y', (Math.min(ya, yb) - 7).toFixed(1)); } }
+    }
+    marcas.setAttribute('d', marcasD);
+    area.setAttribute('x', M.izq); area.setAttribute('y', M.arr);
+    area.setAttribute('width', Math.max(0, ancho - M.izq - M.der)); area.setAttribute('height', Math.max(0, alto - M.arr - M.aba));
+    svg.setAttribute('aria-label', d.descripcion);
+  }
+
+  // Cursor vertical con descripción emergente (mouse o toque).
+  function puntoCercano(segs, x) {
+    let mejor = null;
+    segs.forEach(function (seg) { seg.forEach(function (p) { if (!mejor || Math.abs(p.x - x) < Math.abs(mejor.x - x)) mejor = p; }); });
+    return mejor;
+  }
+  function mover(ev) {
+    if (!ultimo || svg.style.display === 'none') return;
+    const rect = svg.getBoundingClientRect();
+    const px = (ev.clientX - rect.left) * (ancho / rect.width);
+    if (px < M.izq || px > ancho - M.der) { ocultar(); return; }
+    const d = ultimo;
+    const x = d.x0 + (px - M.izq) / (ancho - M.izq - M.der) * (d.x1 - d.x0);
+    cursor.setAttribute('x1', px.toFixed(1)); cursor.setAttribute('x2', px.toFixed(1));
+    cursor.setAttribute('y1', M.arr); cursor.setAttribute('y2', alto - M.aba);
+    cursor.setAttribute('visibility', 'visible');
+    tipLineas[0].textContent = d.formatoTip(x);
+    [0, 1].forEach(function (k) {
+      const s = d.series[k];
+      const p = s.visible ? puntoCercano(s.prep.segmentos, x) : null;
+      tipLineas[k + 1].textContent = p ? 'Carga ' + s.id + ': ' + formatoNumero(p.y, 1) + ' °C' : '';
+      tipLineas[k + 1].hidden = !p;
+    });
+    tip.hidden = false;
+    const izq = Math.min(rect.width - 170, Math.max(0, (ev.clientX - rect.left) + 12));
+    tip.style.left = izq + 'px';
+    tip.style.top = '8px';
+  }
+  function ocultar() { cursor.setAttribute('visibility', 'hidden'); tip.hidden = true; }
+  svg.addEventListener('pointermove', mover);
+  svg.addEventListener('pointerdown', mover);
+  svg.addEventListener('pointerleave', ocultar);
+
+  return { dibujar: dibujar, get datos() { return ultimo; } };
+}
+
+// Arma los datos de la gráfica a partir del monitor activo.
+// opc: { carga: 'A' | 'B' | 'AB', ventanaH: número o Infinity }
+function datosGrafica(m, opc, ahoraH) {
+  const o = tipoOrigen();
+  const muestrasA = m.canales.A.muestras, muestrasB = m.canales.B.muestras;
+  let xMax = ahoraH;
+  [muestrasA, muestrasB].forEach(function (b) { const u = b.ultimo(); if (u && u.tH > xMax) xMax = u.tH; });
+  let x1 = Math.max(xMax, o === 'demo' ? 0.5 : 1 / 60);
+  let x0 = Number.isFinite(opc.ventanaH) ? Math.max(0, x1 - opc.ventanaH) : 0;
+  if (Number.isFinite(opc.ventanaH) && x1 < opc.ventanaH) { x0 = 0; }
+  if (o === 'demo' && !Number.isFinite(opc.ventanaH)) x1 = Math.max(x1, Math.min(m.escenario ? m.escenario.duracionH : x1, 1));
+  const lim = m.limites;
+  const verA = opc.carga !== 'B', verB = opc.carga !== 'A';
+  const pa = prepararSerie(muestrasA, x0, x1, lim, MAX_PUNTOS_SERIE);
+  const pb = prepararSerie(muestrasB, x0, x1, lim, MAX_PUNTOS_SERIE);
+  let y0 = lim.minC, y1 = lim.maxC;
+  [[verA, pa], [verB, pb]].forEach(function (par) {
+    if (!par[0]) return;
+    par[1].segmentos.forEach(function (seg) { seg.forEach(function (p) { if (p.y < y0) y0 = p.y; if (p.y > y1) y1 = p.y; }); });
+  });
+  y0 = Math.floor(y0 - 1); y1 = Math.ceil(y1 + 1);
+
+  let formatoX, formatoTip, unidadX;
+  if (o === 'real') {
+    const base = m.inicioMarca || Date.now();
+    formatoX = function (x, seg) { return horaLocal(base + x * 3600000, seg); };
+    formatoTip = function (x) { return horaLocal(base + x * 3600000, true); };
+    unidadX = 'hora local';
+  } else {
+    formatoX = function (x, seg) { return formatoT(x, seg || o === 'archivo'); };
+    formatoTip = function (x) { return formatoT(x, o === 'archivo') + (o === 'demo' ? ' (simulado)' : ''); };
+    unidadX = o === 'demo' ? 'tiempo simulado' : 'tiempo del archivo';
+  }
+  const ua = m.canales.A.ultimaValida, ub = m.canales.B.ultimaValida;
+  return {
+    x0: x0, x1: x1, y0: y0, y1: y1, lim: lim,
+    series: [{ id: 'A', visible: verA, prep: pa }, { id: 'B', visible: verB, prep: pb }],
+    formatoX: formatoX, formatoTip: formatoTip, unidadX: unidadX,
+    textoVacio: m.canales.A.lecturas + m.canales.B.lecturas === 0
+      ? 'Sin datos todavía. ' + (app.modo === 'demo' ? 'La simulación empieza en un momento.' : 'Conecte la placa A por USB para empezar a registrar.')
+      : 'No hay lecturas válidas en esta ventana de tiempo.',
+    descripcion: 'Gráfica de temperatura. Carga A: ' + (ua ? formatoNumero(ua.tC, 1) + ' °C' : 'sin datos') +
+      '. Carga B: ' + (ub ? formatoNumero(ub.tC, 1) + ' °C' : 'sin datos') + '. Rango aceptable ' + textoLimites(lim) + '.'
+  };
+}
+
+function pintarGrafica(g, opc) {
+  if (!app.monitor) return;
+  g.dibujar(datosGrafica(app.monitor, opc, tiempoActual().tH));
+}
+
+/* =====================================================================
+   10. AUTOPRUEBAS (#/autotest)
+   Vectores V1–V13 del prompt, sección 11, y pruebas extra del analizador.
+   ===================================================================== */
+function cerca(a, b, tol) { return Math.abs(a - b) <= tol; }
+
+// Corre un escenario completo sin pantalla, con el mismo analizador y detector.
+function correrEscenarioSinPantalla(id) {
+  const esc = ESCENARIOS[id];
+  const sim = crearSimulador(esc, SEMILLA_DEMO);
+  const m = crearMonitor({ modo: 'demo', escenario: esc, params: parametrosPorDefecto(),
+    limites: { minC: CONFIG.LIMITE_MIN_C, maxC: CONFIG.LIMITE_MAX_C }, e0H: esc.e0H,
+    umbralOpc: { minimoH: 0, inicialH: 3 * PASO_SIM_H } });
+  let agotadaB = null;
+  sim.lineasHasta(esc.duracionH).forEach(function (l) {
+    const r = analizarLinea(l.linea);
+    if (r.clase === 'mensaje') registrarLectura(m, r.msg, { tH: l.tH, marca: null });
+    if (agotadaB === null && vidaUtilPct(m.canales.B.e0H, m.canales.B.eH, m.params) <= 0) agotadaB = l.tH;
+  });
+  const fin = calcularResumenPuro(m, esc.duracionH);
+  return { m: m, vidaA: fin.vmA.vidaPct, vidaB: fin.vmB.vidaPct, agotadaB: agotadaB, rec: fin.rec };
+}
+function calcularResumenPuro(m, tH) {
+  const vmA = vistaCanal(m, 'A', tH), vmB = vistaCanal(m, 'B', tH);
+  return { vmA: vmA, vmB: vmB, rec: recomendarEntrega(
+    { id: 'A', vidaPct: vmA.vidaPct, sinDatos: vmA.sinDatos }, { id: 'B', vidaPct: vmB.vidaPct, sinDatos: vmB.sinDatos }, CONFIG.EMPATE_PUNTOS) };
+}
+
+// Serie de lecturas cada pasoH, con temperatura según perfil(t).
+function serie(desdeH, hastaH, pasoH, perfil) {
+  const r = [];
+  const n = Math.round((hastaH - desdeH) / pasoH);
+  for (let i = 0; i <= n; i += 1) { const t = desdeH + i * pasoH; r.push({ tH: t, tC: perfil(t), ok: true }); }
+  return r;
+}
+
+function ejecutarAutopruebas() {
+  const p2 = parametrosPorDefecto();
+  const opcPrueba = { minimoH: 10 / 3600, inicialH: 1 };
+  const res = [];
+  function caso(id, nombre, esperado, fn) {
+    let obtenido = '', pasa = false;
+    try { const r = fn(); obtenido = r.obtenido; pasa = !!r.pasa; }
+    catch (e) { obtenido = 'Error: ' + e.message; pasa = false; }
+    res.push({ id: id, nombre: nombre, esperado: esperado, obtenido: obtenido, pasa: pasa });
+  }
+  // Perfiles del ejemplo del informe (p. 18), con lecturas cada 15 min.
+  const perfilA = function (t) { return t < 10 ? 4 : 24; };
+  const lecturasA = serie(0, 14, 0.25, perfilA);
+  const lecturasB = serie(0, 14, 0.25, function () { return 4; });
+
+  caso('V1', 'Factor f(T) con Q10 = 2', 'f(4)=1; f(8)≈1.32; f(14)=2.00; f(24)=4.00', function () {
+    const f = [4, 8, 14, 24].map(function (t) { return factorQ10(t, p2); });
+    return { obtenido: f.map(function (x) { return x.toFixed(4); }).join('; '),
+      pasa: cerca(f[0], 1, 1e-12) && cerca(f[1], 1.32, 0.005) && cerca(f[2], 2, 1e-12) && cerca(f[3], 4, 1e-12) };
+  });
+  caso('V2', 'Carga A: 10 h a 4 °C y 4 h a 24 °C, Q10 = 2', 'E = 26 h; saldo 94 h; 78.33 %', function () {
+    const r = integrarSerie(lecturasA, p2, opcPrueba);
+    const v = vidaUtilPct(0, r.eH, p2);
+    return { obtenido: 'E = ' + r.eH.toFixed(2) + ' h; saldo ' + saldoHoras(0, r.eH, p2).toFixed(2) + ' h; ' + v.toFixed(2) + ' %',
+      pasa: cerca(r.eH, 26, 1e-9) && cerca(v, 78.33, 0.005) };
+  });
+  caso('V3', 'Carga B: 14 h a 4 °C, Q10 = 2', 'E = 14 h; saldo 106 h; 88.33 %', function () {
+    const r = integrarSerie(lecturasB, p2, opcPrueba);
+    const v = vidaUtilPct(0, r.eH, p2);
+    return { obtenido: 'E = ' + r.eH.toFixed(2) + ' h; saldo ' + saldoHoras(0, r.eH, p2).toFixed(2) + ' h; ' + v.toFixed(2) + ' %',
+      pasa: cerca(r.eH, 14, 1e-9) && cerca(v, 88.33, 0.005) };
+  });
+  caso('V4', 'Carga A de V2 con Q10 = 2.5', 'E = 35 h; 70.83 %', function () {
+    const p = { q10: 2.5, trefC: 4, lrefH: 120 };
+    const r = integrarSerie(lecturasA, p, opcPrueba);
+    const v = vidaUtilPct(0, r.eH, p);
+    return { obtenido: 'E = ' + r.eH.toFixed(2) + ' h; ' + v.toFixed(2) + ' %', pasa: cerca(r.eH, 35, 1e-9) && cerca(v, 70.83, 0.005) };
+  });
+  caso('V5', 'Carga A de V2 con Q10 = 3', 'E = 46 h; 61.67 %', function () {
+    const p = { q10: 3, trefC: 4, lrefH: 120 };
+    const r = integrarSerie(lecturasA, p, opcPrueba);
+    const v = vidaUtilPct(0, r.eH, p);
+    return { obtenido: 'E = ' + r.eH.toFixed(2) + ' h; ' + v.toFixed(2) + ' %', pasa: cerca(r.eH, 46, 1e-9) && cerca(v, 61.67, 0.005) };
+  });
+  caso('V6', 'E mayor que Lref', '0 %, nunca negativo', function () {
+    const v1 = vidaUtilPct(0, 150, p2), v2 = vidaUtilPct(26.4, 500, p2);
+    return { obtenido: v1.toFixed(2) + ' % y ' + v2.toFixed(2) + ' %; saldo ' + saldoHoras(0, 150, p2).toFixed(2) + ' h', pasa: v1 === 0 && v2 === 0 && saldoHoras(0, 150, p2) === 0 };
+  });
+  caso('V7', 'Lecturas cada 5 s y luego una a los 60 s', 'El tramo de 55 s no se integra y cuenta como laguna', function () {
+    const s = 1 / 3600;
+    const lect = [0, 5, 10, 15, 20, 75].map(function (x) { return { tH: x * s, tC: 4, ok: true }; });
+    const r = integrarSerie(lect, p2, { minimoH: 10 * s, inicialH: 30 * s });
+    return { obtenido: 'integrado ' + (r.integradoH * 3600).toFixed(1) + ' s; laguna ' + (r.lagunaH * 3600).toFixed(1) + ' s',
+      pasa: cerca(r.lagunaH * 3600, 55, 1e-6) && cerca(r.integradoH * 3600, 20, 1e-6) };
+  });
+  caso('V8', 't_c de −127 o 85.0, o ok en false', 'No se integra ni cambia el porcentaje', function () {
+    const s = 1 / 3600;
+    const base = [0, 5, 10].map(function (x) { return { tH: x * s, tC: 4, ok: true }; });
+    const malas = [{ tH: 15 * s, tC: -127, ok: false }, { tH: 20 * s, tC: 85, ok: true }, { tH: 25 * s, tC: -127, ok: true }, { tH: 30 * s, tC: 5, ok: false }];
+    const r1 = integrarSerie(base, p2, { minimoH: 10 * s, inicialH: 30 * s });
+    const r2 = integrarSerie(base.concat(malas), p2, { minimoH: 10 * s, inicialH: 30 * s });
+    const linea = analizarLinea('{"v":1,"type":"reading","node":"A","sensor":null,"t_c":-127,"ok":true,"seq":1,"up_ms":1,"via":"local"}');
+    const linea85 = analizarLinea('{"v":1,"type":"reading","node":"A","sensor":null,"t_c":85.0,"ok":true,"seq":2,"up_ms":2,"via":"local"}');
+    const v1 = vidaUtilPct(0, r1.eH, p2), v2 = vidaUtilPct(0, r2.eH, p2);
+    return { obtenido: 'vida antes ' + v1.toFixed(6) + ' %, después ' + v2.toFixed(6) + ' %; analizador: ok=' + linea.msg.ok + ' (' + linea.msg.err + '), ok=' + linea85.msg.ok + ' (' + linea85.msg.err + ')',
+      pasa: v1 === v2 && linea.msg.ok === false && linea85.msg.ok === false };
+  });
+  caso('V9', 'E0 de A = 26.4 h y de B = 86.4 h', '78.0 % y 28.0 %', function () {
+    const a = vidaUtilPct(26.4, 0, p2), b = vidaUtilPct(86.4, 0, p2);
+    return { obtenido: a.toFixed(2) + ' % y ' + b.toFixed(2) + ' %', pasa: cerca(a, 78, 1e-9) && cerca(b, 28, 1e-9) };
+  });
+  caso('V10', 'Escenario 1 con B a 24.5 °C', 'B llega a 0 % en unas 8.1 h simuladas (f = 4.14)', function () {
+    const f = factorQ10(24.5, p2), h = horasHastaAgotar(86.4, 0, 24.5, p2);
+    return { obtenido: 'f = ' + f.toFixed(3) + '; ' + h.toFixed(2) + ' h', pasa: cerca(f, 4.14, 0.005) && cerca(h, 8.1, 0.05) };
+  });
+  caso('V11', 'Recomendación con A 78.33 % y B 88.33 %', 'Entregar primero la carga A; diferencia de 10.0 puntos', function () {
+    const r = recomendarEntrega({ id: 'A', vidaPct: 78.33, sinDatos: false }, { id: 'B', vidaPct: 88.33, sinDatos: false }, CONFIG.EMPATE_PUNTOS);
+    return { obtenido: r.titulo + ' · ' + r.motivo, pasa: r.tipo === 'primero' && r.primero === 'A' && fmt1(r.diferencia) === '10.0' };
+  });
+  caso('V12', 'Diferencia de 1.5 puntos', 'CARGAS SIMILARES', function () {
+    const r = recomendarEntrega({ id: 'A', vidaPct: 70, sinDatos: false }, { id: 'B', vidaPct: 71.5, sinDatos: false }, CONFIG.EMPATE_PUNTOS);
+    return { obtenido: r.titulo, pasa: r.tipo === 'similares' && r.titulo === 'CARGAS SIMILARES' };
+  });
+  caso('V13', 'Una carga sin lectura válida reciente', 'NO SE PUEDE COMPARAR', function () {
+    const r = recomendarEntrega({ id: 'A', vidaPct: 80, sinDatos: false }, { id: 'B', vidaPct: null, sinDatos: true }, CONFIG.EMPATE_PUNTOS);
+    return { obtenido: r.titulo + ' · ' + r.motivo, pasa: r.tipo === 'no_comparable' };
+  });
+
+  // ----- Pruebas adicionales -----
+  caso('S1', 'Escenario 2 completo con el simulador (ruido ±0.3 °C)', 'A ≈ 78.33 % y B ≈ 88.33 % (±0.5); entregar primero A', function () {
+    const r = correrEscenarioSinPantalla(2);
+    return { obtenido: 'A ' + r.vidaA.toFixed(2) + ' %, B ' + r.vidaB.toFixed(2) + ' %; ' + r.rec.titulo,
+      pasa: cerca(r.vidaA, 78.33, 0.5) && cerca(r.vidaB, 88.33, 0.5) && r.rec.primero === 'A' };
+  });
+  caso('S2', 'Escenario 1 completo con el simulador', 'Inicia en 78 % y 28 %; B llega a 0 % cerca de 8.1 h', function () {
+    const r = correrEscenarioSinPantalla(1);
+    const primeraA = r.m.canales.A.muestras.get(0).vida, primeraB = r.m.canales.B.muestras.get(0).vida;
+    return { obtenido: 'inicio A ' + primeraA.toFixed(1) + ' %, B ' + primeraB.toFixed(1) + ' %; B en 0 % a las ' + (r.agotadaB === null ? '—' : r.agotadaB.toFixed(2) + ' h'),
+      pasa: cerca(primeraA, 78, 0.01) && cerca(primeraB, 28, 0.01) && r.agotadaB !== null && cerca(r.agotadaB, 8.1, 0.25) };
+  });
+  caso('A1', 'Analizador: línea de arranque que no es JSON', 'Se ignora sin error', function () {
+    const r = analizarLinea('ets Jun  8 2016 00:22:57  rst:0x1 (POWERON_RESET)');
+    return { obtenido: r.clase + ' (' + r.motivo + ')', pasa: r.clase === 'ignorada' };
+  });
+  caso('A2', 'Analizador: línea partida en dos fragmentos y \\r\\n', 'Se reconstruye una sola línea válida', function () {
+    const d = crearDivisorLineas(CONFIG.MAX_LINEA_CARACTERES);
+    const a = d.alimentar('{"v":1,"type":"reading","node":"B","sensor":null,"t_c":4.5');
+    const b = d.alimentar('0,"ok":true,"seq":7,"up_ms":9,"via":"espnow"}\r\n');
+    const r = analizarLinea(b.lineas[0]);
+    return { obtenido: a.lineas.length + ' líneas y luego ' + b.lineas.length + '; t_c = ' + (r.msg ? r.msg.tC : '—'),
+      pasa: a.lineas.length === 0 && b.lineas.length === 1 && r.clase === 'mensaje' && r.msg.tC === 4.5 };
+  });
+  caso('A3', 'Analizador: más de 4 KB sin salto de línea', 'Se descarta lo acumulado', function () {
+    const d = crearDivisorLineas(CONFIG.MAX_LINEA_CARACTERES);
+    const r = d.alimentar('x'.repeat(5000));
+    const r2 = d.alimentar('{"v":1,"type":"status","node":"A","peer":"B","peer_age_ms":1}\n');
+    return { obtenido: 'descartadas ' + r.descartadas + '; siguiente línea: ' + analizarLinea(r2.lineas[0]).clase,
+      pasa: r.descartadas === 1 && r2.lineas.length === 1 && analizarLinea(r2.lineas[0]).clase === 'mensaje' };
+  });
+  caso('A4', 'Detector: salto de seq y reinicio (up_ms baja)', '2 paquetes perdidos y 1 reinicio', function () {
+    const m = crearMonitor({ modo: 'real', params: p2, limites: { minC: 0, maxC: 8 }, umbralOpc: { minimoH: 10 / 3600, inicialH: 30 / 3600 } });
+    const l = function (seq, up, t) { return analizarLinea('{"v":1,"type":"reading","node":"B","sensor":null,"t_c":4,"ok":true,"seq":' + seq + ',"up_ms":' + up + ',"via":"espnow"}').msg; };
+    registrarLectura(m, l(10, 50000, 0), { tH: 0, marca: 0 });
+    registrarLectura(m, l(13, 65000, 15 / 3600), { tH: 15 / 3600, marca: 15000 });
+    registrarLectura(m, l(1, 800, 20 / 3600), { tH: 20 / 3600, marca: 20000 });
+    const c = m.canales.B;
+    return { obtenido: c.perdidos + ' perdidos, ' + c.reinicios + ' reinicio(s)', pasa: c.perdidos === 2 && c.reinicios === 1 };
+  });
+  caso('A5', 'Detector: una sola lectura fuera de rango', 'No dispara alerta; la segunda sí', function () {
+    const m = crearMonitor({ modo: 'real', params: p2, limites: { minC: 0, maxC: 8 }, umbralOpc: { minimoH: 10 / 3600, inicialH: 30 / 3600 } });
+    const l = function (t) { return analizarLinea('{"v":1,"type":"reading","node":"A","sensor":null,"t_c":' + t + ',"ok":true,"via":"local"}').msg; };
+    registrarLectura(m, l(4), { tH: 0, marca: 0 });
+    registrarLectura(m, l(12), { tH: 5 / 3600, marca: 5000 });
+    const despuesDeUna = m.canales.A.enExcursion;
+    registrarLectura(m, l(12.5), { tH: 10 / 3600, marca: 10000 });
+    return { obtenido: 'tras 1: ' + despuesDeUna + '; tras 2: ' + m.canales.A.enExcursion + '; excursiones ' + m.canales.A.excursiones,
+      pasa: despuesDeUna === false && m.canales.A.enExcursion === true && m.canales.A.excursiones === 1 };
+  });
+  caso('A6', 'Analizador: tipo desconocido y campos extra', 'Tipo desconocido se ignora; campos extra no estorban', function () {
+    const r1 = analizarLinea('{"v":1,"type":"debug","x":1}');
+    const r2 = analizarLinea('{"v":1,"type":"reading","node":"A","sensor":null,"t_c":3.25,"ok":true,"futuro":"x","via":"local"}');
+    return { obtenido: r1.clase + '; ' + r2.clase + ' t_c=' + (r2.msg ? r2.msg.tC : '—'), pasa: r1.clase === 'ignorada' && r2.clase === 'mensaje' && r2.msg.tC === 3.25 };
+  });
+  return res;
+}
+
+function pintarAutopruebas() {
+  const res = ejecutarAutopruebas();
+  const cuerpo = $('autotest-cuerpo');
+  while (cuerpo.firstChild) cuerpo.removeChild(cuerpo.firstChild);
+  res.forEach(function (r) {
+    const tr = crear('tr');
+    tr.setAttribute('data-id', r.id);
+    tr.append(crear('td', '', r.id), crear('td', '', r.nombre), crear('td', '', r.esperado), crear('td', '', r.obtenido));
+    const td = crear('td', r.pasa ? 'pasa' : 'falla', r.pasa ? 'PASS' : 'FAIL');
+    tr.appendChild(td);
+    cuerpo.appendChild(tr);
+  });
+  const pasan = res.filter(function (r) { return r.pasa; }).length;
+  const vPasan = res.filter(function (r) { return r.pasa && /^V/.test(r.id); }).length;
+  const vTotal = res.filter(function (r) { return /^V/.test(r.id); }).length;
+  $('autotest-resumen').textContent = 'Resultado: ' + pasan + ' de ' + res.length + ' en PASS (V1–V13: ' + vPasan + ' de ' + vTotal + ')';
+  $('autotest-resumen').className = 'mayus ' + (pasan === res.length ? 'pasa' : 'falla');
+}
+
+/* =====================================================================
+   ARRANQUE
+   ===================================================================== */
+function iniciar() {
+  $('version').textContent = 'v' + CONFIG.VERSION + ' · compilado ' + CONFIG.COMPILADO;
+  const nombres = almacen.leer('nombres');
+  if (nombres && typeof nombres.A === 'string' && typeof nombres.B === 'string') {
+    app.nombres = { A: nombres.A.slice(0, 40) || CONFIG.NOMBRE_LOTE.A, B: nombres.B.slice(0, 40) || CONFIG.NOMBRE_LOTE.B };
+  }
+  construirResumen();
+  /*CONSTRUIR-EXTRA*/
+  enlazarInterfaz();
+  iniciarDemo(1);                 // cada vez que se abre la página arranca en DEMOSTRACIÓN
+  aplicarRuta();
+  requestAnimationFrame(bucle);
+  setInterval(avanzar, 1000);
+}
+
+// API para pruebas desde la consola o con Playwright (solo funciones puras).
+window.KAIROS = Object.freeze({
+  version: CONFIG.VERSION,
+  modelo: Object.freeze({ factorQ10: factorQ10, integrarTramo: integrarTramo, saldoHoras: saldoHoras, vidaUtilPct: vidaUtilPct,
+    horasHastaAgotar: horasHastaAgotar, integrarSerie: integrarSerie, esLecturaUtil: esLecturaUtil, umbralLagunaH: umbralLagunaH }),
+  niveles: Object.freeze({ nivelPorVida: nivelPorVida, estadoTermico: estadoTermico, peorNivel: peorNivel, recomendarEntrega: recomendarEntrega }),
+  analizador: Object.freeze({ analizarLinea: analizarLinea, crearDivisorLineas: crearDivisorLineas }),
+  simulador: Object.freeze({ crearSimulador: crearSimulador, ESCENARIOS: ESCENARIOS, correrEscenarioSinPantalla: correrEscenarioSinPantalla }),
+  autopruebas: ejecutarAutopruebas
+});
+
+iniciar();
+})();
+</script>
+</body>
+</html>

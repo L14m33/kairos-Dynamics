@@ -69,7 +69,7 @@ ets Jun  8 2016 00:22:57  rst:0x1 (POWERON_RESET),boot:0x13 (SPI_FAST_FLASH_BOOT
 5. **La marca de tiempo la pone la laptop** al recibir la línea (`Date.now()` para el registro; `performance.now()` para medir intervalos). El ESP32 no tiene reloj.
 6. Reinicio de un nodo: `up_ms` o `seq` bajan respecto de la lectura anterior del mismo nodo.
 7. Paquetes perdidos por nodo = suma de los saltos de `seq` mayores que 1 (sin contar reinicios).
-8. Intervalo observado por nodo = **mediana de las últimas 10 diferencias** entre lecturas. Un nodo queda «sin datos» cuando pasan **3 intervalos observados** sin lectura, con un **mínimo de 10 s**.
+8. Intervalo observado por nodo = **mediana de las últimas 10 diferencias** entre lecturas. Un nodo queda «sin datos» cuando pasan **3 intervalos observados** sin lectura, con un **mínimo de 10 s**. Para el primer tramo, sin ninguna diferencia medida todavía, el umbral es 30 s.
 9. Laguna: si entre dos lecturas válidas pasan más de 3 intervalos observados, ese tramo **no se integra** y se suma a «Datos faltantes». Nunca se rellena con una temperatura inventada.
 10. Todo dato serial es no confiable: se muestra con `textContent`, nunca como HTML.
 

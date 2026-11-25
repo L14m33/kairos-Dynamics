@@ -1,6 +1,6 @@
 # Arquitectura · KAIROS DYNAMICS
 
-Estado: **Etapa 1 (planeación)**. Aún no existe `kairos_dashboard.html`. Lo que aquí se describe es diseño, no código probado.
+Estado: **Etapa 2 terminada** (núcleo de demostración en `kairos_dashboard.html`). Las partes de USB, archivo y vistas restantes se agregan en las Etapas 3 y 4.
 
 ## 1. Flujo de datos
 
@@ -57,7 +57,7 @@ Sonda DS18B20 (A) ─GPIO4─ Placa A (ESP-32D) ── USB 115200, NDJSON ──
 | NDJSON | CSV, binario | Se lee en el Monitor Serie y admite campos nuevos sin romper la página. |
 | ESP-NOW entre placas | Wi-Fi con router, Bluetooth | En el evento no hay internet ni router. |
 | Δt con la temperatura de la lectura anterior | Promedio de extremos | Regla del prompt (§4); el pseudocódigo del informe (p. 24–25) no fija qué T usar. |
-| Laguna y «sin datos» con el mismo umbral: máx(3 × intervalo observado, 10 s); 30 s mientras haya < 3 diferencias medidas | `INTERVALO_S` fijo | La página mide el intervalo de B en lugar de suponerlo. |
+| Laguna y «sin datos» con el mismo umbral: máx(3 × mediana de las últimas 10 diferencias, 10 s); para el primer tramo, sin diferencias medidas, 30 s (en demostración, 15 min simulados) | `INTERVALO_S` fijo | La página mide el intervalo de B en lugar de suponerlo; así solo el primer tramo depende de un valor fijo. |
 | Tiempo simulado = tiempo real × velocidad; muestras en rejilla de 5 min simulados con `mulberry32` y semilla fija | Contar ticks; una muestra por cuadro | Determinista y sin distorsión si Chrome frena la pestaña. |
 | Escenario 1 termina a las 12 h simuladas y se pausa (el hero lo repite) | Correr sin fin | B se agota a las ≈ 8.1 h; quedan 4 h con «VIDA ÚTIL ESTIMADA AGOTADA». |
 | Resumen dimensionado para 1366 × 633 px visibles | Solo 1366 × 768 | Es lo que deja Chrome con la barra de tareas; con F11 sobra espacio. |
@@ -72,5 +72,6 @@ Sonda DS18B20 (A) ─GPIO4─ Placa A (ESP-32D) ── USB 115200, NDJSON ──
 Para declararlo si el jurado lo pide. La convocatoria no tiene reglas sobre uso de IA; su regla de plagio (p. 30) se aplica al informe.
 
 - **Etapa 1, generado por Claude (asistente de programación de Anthropic) a partir de `PROMPT_KAIROS.md` escrito por el equipo:** este documento, `PROTOCOLO.md`, `PENDIENTES.md`, `PRUEBAS.md`, `wireframes.html`, sus capturas y `tests/capturar_wireframes.js`, `firmware/00_mac_address` y `firmware/etapa1_nodo_A_json` (este último adapta el sketch original del equipo, que no se modificó).
+- **Etapa 2, generado por Claude:** `kairos_dashboard.html` (tokens, rutas, Resumen, simulador con los dos escenarios y sus controles, modelo Q10, niveles, recomendación, analizador NDJSON, detector de eventos, gráfica SVG y `#/autotest`).
 - **Del equipo:** el planteamiento, el informe, el montaje, `KAIROS_Etapa1_LecturaSonda.ino` y todas las decisiones de alcance del prompt.
 - Las etapas siguientes se irán anotando aquí. Se recomienda que el equipo lea y pueda explicar cada función antes del viernes.
