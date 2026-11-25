@@ -1,6 +1,6 @@
 # Arquitectura · KAIROS DYNAMICS
 
-Estado: **Etapa 4 terminada**: todas las vistas, persistencia, exportación, página institucional y modo presentación.
+Estado: **Etapa 5 terminada** (versión 1.0). Verificación en `docs/PRUEBAS.md`.
 
 ## 1. Flujo de datos
 
@@ -52,34 +52,24 @@ Sonda DS18B20 (A) ─GPIO4─ Placa A (ESP-32D) ── USB 115200, NDJSON ──
 
 | Decisión | Descartado | Por qué |
 | --- | --- | --- |
-| Un solo HTML con `<script>` clásico y gráfica en SVG propio | Vite/React/Recharts, Chart.js | Un módulo externo se bloquea por CORS en `file://` (prompt §2); cero red y < 300 KB. |
-| Web Serial | Servidor local, página servida por la placa | Nada que instalar en la laptop; la página de la placa queda de respaldo. |
-| NDJSON | CSV, binario | Se lee en el Monitor Serie y admite campos nuevos sin romper la página. |
-| ESP-NOW entre placas | Wi-Fi con router, Bluetooth | En el evento no hay internet ni router. |
-| Δt con la temperatura de la lectura anterior | Promedio de extremos | Regla del prompt (§4); el pseudocódigo del informe (p. 24–25) no fija qué T usar. |
-| Laguna y «sin datos» con el mismo umbral: máx(3 × mediana de las últimas 10 diferencias, 10 s); para el primer tramo, sin diferencias medidas, 30 s (en demostración, 15 min simulados) | `INTERVALO_S` fijo | La página mide el intervalo de B en lugar de suponerlo; así solo el primer tramo depende de un valor fijo. |
-| Tiempo simulado = tiempo real × velocidad; muestras en rejilla de 5 min simulados con `mulberry32` y semilla fija | Contar ticks; una muestra por cuadro | Determinista y sin distorsión si Chrome frena la pestaña. |
-| Escenario 1 termina a las 12 h simuladas y se pausa (el hero lo repite) | Correr sin fin | B se agota a las ≈ 8.1 h; quedan 4 h con «VIDA ÚTIL ESTIMADA AGOTADA». |
-| Resumen dimensionado para 1366 × 633 px visibles | Solo 1366 × 768 | Es lo que deja Chrome con la barra de tareas; con F11 sobra espacio. |
-| Porcentaje con un decimal (78.3 %) | Entero | Se ve el descenso y coincide con el 78.33 % del informe (p. 18). |
-| La carga elegida se subraya con el color de su nivel | Texto naranja | El color se reserva para el estado; el naranja es de marca. |
-| Mensajes con `v` ≠ 1: se ignoran y se avisa | Intentar leerlos | No interpretar mal un firmware futuro. |
-| Raíz del repositorio = carpeta `kairos/` del prompt; un commit por hito | Subcarpeta y `respaldo/` | Ya es un repositorio git. |
-| Reproducción de archivo: el tiempo sale de `up_ms` de cada nodo; un monitor aparte, rotulado «Reproducción de archivo», que no se guarda | Hora de la laptop al leer el archivo | La captura no trae la hora de recepción; `up_ms` es el reloj del nodo que midió. Así lo grabado nunca parece una lectura en vivo. |
-| El Nodo B no registra la función de «envío terminado» de ESP-NOW | Usarla para contar fallas de envío | Su firma cambió en ESP-IDF 5.5 (núcleo 3.3); las pérdidas ya se ven con `seq`. |
-| Límites editables entre −10 y 40 °C | — | El prompt dice «∂10»: errata de −10. |
-| Límites y parámetros se editan en el monitor activo; los de la demostración vuelven a los de `CONFIG` al abrir la página | Guardarlos siempre | Si se guardaran, la demostración del viernes podría arrancar con otro Q10 y dar cifras distintas a las del informe. Los del registro real sí se guardan con él. |
-| Al cambiar un límite se reevalúa la última lectura de inmediato; una excursión nueva sigue pidiendo 2 lecturas | Esperar 2 lecturas también para cerrar | El prompt pide efecto inmediato en avisos; la histéresis se conserva para abrir alertas. |
-| Persistencia: una sola clave `kairos.v1.real` (más `kairos.v1.nombres`); el tiempo con la página cerrada cuenta como datos faltantes | Varias claves por muestra | Un solo `setItem` dentro de `try/catch`; si no cabe, se reintenta con 1,000 muestras por nodo. |
-| CSV de una reproducción: `origen` = `archivo` y una columna extra `t_archivo_h` | Rotularlo `real` | Lo grabado no es una lectura en vivo (prioridad 1: veracidad). |
+| Un solo HTML, `<script>` clásico, gráfica SVG propia | Vite/React/Recharts, Chart.js | Un módulo externo se bloquea por CORS en `file://`; cero red; < 300 KB. |
+| Web Serial + NDJSON | Servidor local; CSV o binario | Nada que instalar; se lee en el Monitor Serie; admite campos nuevos. |
+| ESP-NOW entre placas; B no registra el «envío terminado» | Wi-Fi con router; usar esa función | No hay router en el evento; su firma cambió en ESP-IDF 5.5 y `seq` ya muestra pérdidas. |
+| Δt con la T de la lectura anterior | Promedio de extremos | Regla del prompt (§4); el informe (p. 24–25) no fija qué T usar. |
+| Laguna y «sin datos» con un umbral: máx(3 × mediana de 10 diferencias, 10 s); primer tramo: 30 s (demo: 15 min simulados) | `INTERVALO_S` fijo | El intervalo de B se mide, no se supone. |
+| Tiempo simulado = tiempo real × velocidad; rejilla de 5 min simulados; `mulberry32` con semilla fija | Contar ticks | Determinista aunque Chrome frene la pestaña. |
+| Escenario 1 dura 12 h simuladas | Sin fin | B se agota a ≈ 8.1 h y se ve «AGOTADA». |
+| Resumen para 1366 × 633 px; porcentaje con un decimal; carga elegida subrayada con el color de su nivel | Solo 768 px; entero; naranja | Chrome + barra de tareas dejan ~630 px; 78.3 % como el informe; el color es del estado. |
+| Reproducción de archivo: tiempo desde `up_ms`, monitor aparte, `origen` = `archivo`, no se guarda | Hora de la laptop; rotularlo real | Lo grabado nunca debe parecer una lectura en vivo. |
+| Límites y parámetros por monitor; los de la demo vuelven a `CONFIG` al abrir; un cambio de límite reevalúa la última lectura | Guardarlos siempre | La demo del viernes debe dar las cifras del informe; efecto inmediato en avisos. |
+| Persistencia en `kairos.v1.real`; el tiempo con la página cerrada cuenta como datos faltantes | Varias claves | Un `setItem` en `try/catch`; si no cabe, 1,000 muestras por nodo. |
+| `v` ≠ 1 se ignora; límites entre −10 y 40 °C («∂10» es errata); raíz del repo = `kairos/`, un commit por hito | — | Simplicidad. |
 
 ## 5. Partes generadas por Claude
 
-Para declararlo si el jurado lo pide. La convocatoria no tiene reglas sobre uso de IA; su regla de plagio (p. 30) se aplica al informe.
+Para declararlo si el jurado lo pide (la convocatoria no regula el uso de IA; su regla de plagio, p. 30, se aplica al informe). Todo lo siguiente lo generó **Claude (asistente de Anthropic)** a partir de `PROMPT_KAIROS.md`, escrito por el equipo:
 
-- **Etapa 1, generado por Claude (asistente de programación de Anthropic) a partir de `PROMPT_KAIROS.md` escrito por el equipo:** este documento, `PROTOCOLO.md`, `PENDIENTES.md`, `PRUEBAS.md`, `wireframes.html`, sus capturas y `tests/capturar_wireframes.js`, `firmware/00_mac_address` y `firmware/etapa1_nodo_A_json` (este último adapta el sketch original del equipo, que no se modificó).
-- **Etapa 2, generado por Claude:** `kairos_dashboard.html` (tokens, rutas, Resumen, simulador con los dos escenarios y sus controles, modelo Q10, niveles, recomendación, analizador NDJSON, detector de eventos, gráfica SVG y `#/autotest`).
-- **Etapa 3, generado por Claude:** transportes Web Serial y archivo, estados de conexión, vista Dispositivos, `firmware/nodo_A`, `firmware/nodo_B`, `tests/serial_simulado.js`, `tests/generar_captura.js`, `tests/captura_ejemplo.jsonl` (inventada) y `tests/firmware_simulado/`.
-- **Etapa 4, generado por Claude:** vistas Cargas, Temperatura, Alertas y Reportes, persistencia y exportación, página institucional (con los textos del prompt), modo presentación y `tests/persistencia_csv.js`.
-- **Del equipo:** el planteamiento, el informe, el montaje, `KAIROS_Etapa1_LecturaSonda.ino` y todas las decisiones de alcance del prompt.
-- Las etapas siguientes se irán anotando aquí. Se recomienda que el equipo lea y pueda explicar cada función antes del viernes.
+- `kairos_dashboard.html` completo (Etapas 2 a 4) y sus correcciones de la Etapa 5.
+- `firmware/00_mac_address`, `etapa1_nodo_A_json` (adapta el sketch original del equipo, que no se modificó), `nodo_A` y `nodo_B`.
+- `docs/` (este documento, `PROTOCOLO`, `PENDIENTES`, `PRUEBAS`, `MANUAL_USUARIO` en borrador, `wireframes.html`, capturas), `README.md` y todo `tests/` (la captura `.jsonl` es inventada).
+- **Del equipo:** el planteamiento, el informe, el montaje, `KAIROS_Etapa1_LecturaSonda.ino` y las decisiones de alcance del prompt. Antes del viernes, cada integrante debe poder explicar las funciones de su parte.

@@ -1,33 +1,43 @@
 # Pruebas
 
-## Plan de pruebas (lo que ejecuta Claude, sin hardware)
+## Parte 1 · Pruebas sin hardware (ejecutadas por Claude, 2026-11-25)
 
-1. **Vectores V1–V13** del modelo en `#/autotest`, dentro de la propia página, y además con Playwright (Chromium sin interfaz) leyendo el PASS/FAIL.
-2. **Cero red:** abrir `kairos_dashboard.html` desde `file://` y registrar las peticiones; solo debe aparecer el propio archivo. Cero errores y avisos en consola.
-3. **Escenarios:** escenario 2 completo a 1 h = 1 s (A ≈ 78.33 %, B ≈ 88.33 %, ±0.5) y escenario 1 hasta «VIDA ÚTIL ESTIMADA AGOTADA».
-4. **Falla de sonda B** en demostración: SIN LECTURA, NO SE PUEDE COMPARAR y, al reconectar, laguna y no cero.
-5. **Serial simulado:** un doble de `navigator.serial` que emite 3 min de NDJSON con texto de arranque, línea partida, −127, 85.0, salto de `seq`, reinicio y B callado 30 s.
-6. **Reproducción de archivo** `.jsonl` con el mismo flujo; y el firmware de la Etapa 1 compilado contra cabeceras simuladas, con su salida validada como JSON.
-7. **Persistencia y CSV:** recargar (reales sí, simulados no), «Borrar datos locales», sin `localStorage`; CSV con BOM, `origen` en todas las filas y filas = muestras.
-8. **Pantallas:** capturas a 1920×1080, 1366×768, 1366×633, 1024×768 y 390×844, sin desplazamiento horizontal; revisarlas a ojo.
-9. **Accesibilidad y texto:** recorrido con teclado por las seis vistas; script de contraste real de cada texto; búsqueda de palabras prohibidas.
-10. **Rendimiento:** 10 min de demostración a 1 h = 1 s; nodos DOM ±5 %.
+Herramientas: Chromium sin interfaz con Playwright 1.63 (sin instalar nada global), Node 22, g++ 13. Resultados detallados en el informe final de la conversación; aquí, el resumen.
 
-**Advertencia:** ninguna prueba con `navigator.serial` simulado demuestra que funcione con la placa real. Eso solo lo dicen las pruebas de abajo.
+| # (sección 11) | Prueba | Comando o evidencia | Resultado |
+| --- | --- | --- | --- |
+| 1 | Sin red y consola limpia | `node tests/verificacion.js`: solo se pide `kairos_dashboard.html`; 0 errores y 0 avisos | PASA |
+| 2 | Autopruebas V1–V13 | `#/autotest`: 21 de 21 en PASS (V1–V13 y 8 extra) | PASA |
+| 3 | Escenario 2 a 1 h = 1 s | A 78.4 %, B 88.3 %, «Entregar primero: Carga A» | PASA |
+| 4 | Escenario 1 | Inicia en 78 % y 28 %; B llega a «VIDA ÚTIL ESTIMADA AGOTADA» | PASA |
+| 5 | Falla de sonda B | SIN LECTURA y NO SE PUEDE COMPARAR; al reconectar, «Datos faltantes 50 min · estimación incompleta» | PASA |
+| 6 | `navigator.serial` simulado, 3 min | `node tests/serial_simulado.js`: 23 de 23. Ignora 5 líneas no JSON, reconstruye la línea partida, rechaza −127 y 85.0 con `ok:true`, cuenta 8 paquetes perdidos de B (salto de 2 + 6 durante el silencio), detecta el reinicio de A, muestra «Nodo B sin datos hace 31 s», y maneja la pérdida y reconexión del cable sin errores | PASA |
+| 7 | Reproducción de archivo `.jsonl` | `tests/captura_ejemplo.jsonl` (inventada): mismo analizador, intervalo de 5 s, reinicio detectado y 5 líneas ignoradas | PASA (prueba manual con Playwright) |
+| 8 | Persistencia | `node tests/persistencia_csv.js`: reales sí, simulados no; borrar funciona; sin `localStorage` avisa y sigue | PASA |
+| 9 | CSV | BOM, `origen` en todas las filas, filas = muestras (13 = 13), ISO 8601 con zona | PASA (Excel no se probó: no hay Excel en el entorno) |
+| 10 | Pantallas | 5 tamaños × 8 rutas sin desplazamiento horizontal; a 1366×768 y 1366×633 la recomendación termina en 605 px | PASA |
+| 11 | Accesibilidad | 106 elementos recorridos con Tab, todos con foco de 2 px; contraste real de 816 textos ≥ 4.5:1 (≥ 3:1 en grande), con fondos semitransparentes y degradados compuestos | PASA (después de corregir el «°C» de la miniatura) |
+| 12 | Honestidad del texto | Sin palabras prohibidas; «DATOS SIMULADOS», «Estimación en validación» y el aviso de inocuidad presentes | PASA |
+| 13 | Rendimiento, 10 min a 1 h = 1 s | `node tests/rendimiento.js`: DOM 1715 → 1715 nodos (0.00 %), memoria JS 2.6 → 3.1 MB, scripts al 1.28 % del tiempo, CPU en pausa 0.44 % de un núcleo. Repetida 3 min sobre el archivo final: igual (0.00 %, 0.46 %) | PASA |
+| 14 | Rutas | 8 rutas, Atrás y ruta desconocida hacia el Resumen | PASA |
+| — | Firmware contra cabeceras simuladas | `bash tests/firmware_simulado/compilar.sh`: 6 compilaciones con `-Werror` y JSON válido | PASA (no sustituye compilar con el núcleo ESP32) |
 
-## Pruebas con hardware (las ejecuta el equipo)
+**Advertencia:** ninguna prueba con `navigator.serial` simulado demuestra que funcione con la placa real.
+
+## Parte 2 · Pruebas con hardware (las ejecuta el equipo)
 
 Llenar «Resultado real», «Fecha» y «Quién» al hacer cada prueba. **No inventar resultados**: si no se hizo, se deja vacío.
 
 | # | Prueba | Resultado esperado | Resultado real | Fecha | Quién |
 | --- | --- | --- | --- | --- | --- |
-| 0 | Cargar `firmware/etapa1_nodo_A_json` en la placa A y abrir el Monitor Serie a 115200 | Una línea `hello` y luego una línea `reading` cada 5 s con `"ok":true` y una temperatura razonable. Anotar versión del núcleo y de las librerías | | | |
-| 0b | Cargar `firmware/00_mac_address` en la placa A | Se imprime la MAC cada 3 s; copiarla a este documento: `__:__:__:__:__:__` | | | |
-| 1 | En la laptop de la escuela, con Chrome o Edge: conectar la placa A | El puerto aparece en el selector de la página y llegan líneas JSON. Anotar VID:PID y versión del navegador (`chrome://version`) | | | |
+| 0 | Compilar los cuatro sketches en Arduino IDE («ESP32 Dev Module») | Compilan sin errores. Anotar la versión del núcleo ESP32, de OneWire y de DallasTemperature | | | |
+| 0b | Cargar `firmware/00_mac_address` en la placa A | Se imprime la MAC cada 3 s; copiarla aquí: `__:__:__:__:__:__` | | | |
+| 0c | Cargar `firmware/etapa1_nodo_A_json` y abrir el Monitor Serie a 115200 | Una línea `hello` y luego una `reading` cada 5 s con `"ok":true` | | | |
+| 1 | En la laptop de la escuela, con Chrome o Edge: conectar la placa A | El puerto aparece en el selector y llegan líneas JSON. Anotar VID:PID y versión del navegador (`chrome://version`) | | | |
 | 2 | Nodo B encendido con su power bank | Llegan lecturas con `"via":"espnow"` | | | |
 | 3 | Calentar la sonda B con la mano durante 1 minuto | Sube la temperatura de B y cambia la recomendación | | | |
 | 4 | Desconectar la sonda B | La tarjeta B pasa a SIN LECTURA y la recomendación a NO SE PUEDE COMPARAR | | | |
 | 5 | Funcionamiento continuo durante 30 minutos | Anotar paquetes perdidos, lagunas y estado de la conexión al final | | | |
 | 6 | Cerrar y reabrir la página; reconectar | Los datos reales se conservan y los simulados no | | | |
-
-Las pruebas 1 a 6 necesitan `kairos_dashboard.html` (Etapas 2 a 4); las pruebas 2 a 5, también `firmware/nodo_A` y `firmware/nodo_B` (Etapa 3). Las pruebas 0 y 0b se pueden hacer hoy.
+| 7 | Descargar el CSV de muestras y abrirlo en Excel | Acentos correctos y columna `origen` en todas las filas | | | |
+| 8 | Imprimir el resumen por carga (Reportes) | Sale una hoja con las dos cargas, la recomendación y el aviso | | | |

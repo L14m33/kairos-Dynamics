@@ -84,7 +84,7 @@ a { color: var(--cyan); }
 /* =====================================================================
    ESTRUCTURA DEL TABLERO
    ===================================================================== */
-.tablero { display: grid; grid-template-columns: 232px minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); min-height: 100vh; }
+.tablero { display: grid; grid-template-columns: 232px minmax(0, 1fr); grid-template-rows: auto auto 1fr; min-height: 100vh; }
 .barra-sup {
   grid-column: 1 / -1; position: sticky; top: 0; z-index: 20;
   display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; min-height: 56px; padding: 6px 20px;
@@ -120,7 +120,7 @@ a { color: var(--cyan); }
 .meta { font-size: .875rem; color: var(--ink-dim); }
 
 .lateral {
-  position: sticky; top: 57px; align-self: start; height: calc(100vh - 57px);
+  position: sticky; top: var(--alto-barra, 59px); align-self: start; height: calc(100vh - var(--alto-barra, 59px)); grid-row: 2 / 4;
   display: flex; flex-direction: column; gap: 4px; padding: 16px 12px; border-right: 1px solid var(--border);
 }
 .lateral a {
@@ -130,8 +130,7 @@ a { color: var(--cyan); }
 .lateral a:hover { color: var(--ink); }
 .lateral a[aria-current="page"] { background: var(--card); color: var(--ink); box-shadow: inset 3px 0 0 var(--cyan); }
 .lateral .icono { width: 20px; height: 20px; }
-.lateral .version { margin-top: auto; padding: 0 12px; font-size: .75rem; color: var(--ink-dim); }
-.lateral .version a { color: var(--ink-dim); }
+.pie-tablero { grid-column: 2; padding: 8px 24px 20px; font-size: .75rem; color: var(--ink-dim); }
 
 .principal { padding: 16px 24px 32px; min-width: 0; outline: none; }
 .vista > h1, .fila-titulo h1 { font-size: 1.25rem; margin: 0; }
@@ -324,6 +323,8 @@ dialog h2 { margin: 0 0 8px; font-size: 1.25rem; }
 .mini .tarjeta { padding: 10px 14px 10px; }
 .mini .temp { font-size: 3rem; }
 .mini .temp small { font-size: 1.125rem; }
+/* A 18 px el °C ya no es «texto grande»: en rojo usa el tono para texto pequeño. */
+.mini .temp[data-termico="fuera"] small { color: var(--crit-text); }
 .mini .lote { font-size: 1rem; cursor: default; }
 .mini .lote .icono { display: none; }
 .mini .vida { font-size: 1rem; }
@@ -356,6 +357,7 @@ dialog h2 { margin: 0 0 8px; font-size: 1.25rem; }
    ===================================================================== */
 html.presentacion .tablero { grid-template-columns: minmax(0, 1fr); }
 html.presentacion .lateral { display: none; }
+html.presentacion .pie-tablero { grid-column: 1; }
 html.presentacion .principal { padding: 12px 20px 20px; }
 /* La barra superior no crece en presentación: así no se parte en dos filas. */
 html.presentacion .barra-sup .marca { font-size: 18px; }
@@ -376,7 +378,7 @@ html.presentacion .barra-sup .chip-conexion, html.presentacion .barra-sup .btn {
   }
   .lateral a { flex-direction: column; gap: 2px; min-height: 56px; padding: 4px 6px; font-size: .6875rem; justify-content: center; }
   .lateral a[aria-current="page"] { box-shadow: inset 0 3px 0 var(--cyan); }
-  .lateral .version { display: none; }
+  .pie-tablero { grid-column: 1; padding-bottom: 88px; }
   .principal { padding: 12px 16px 88px; }
   .tarjetas, .debajo, .rejilla-2, .rejilla-3, .hero, .pasos, .tecnologias, .equipo { grid-template-columns: minmax(0, 1fr); }
   .reco { padding: 14px 18px; }
@@ -384,6 +386,9 @@ html.presentacion .barra-sup .chip-conexion, html.presentacion .barra-sup .btn {
   .hero h1 { font-size: 2.5rem; }
   .seccion { padding: 40px 16px; }
   .barra-sup { padding: 6px 16px; position: static; }
+  /* En pantallas angostas la barra del inicio ocupa varias filas: deja de ser fija para no tapar el título. */
+  .inicio-nav { position: static; padding: 6px 16px; }
+  .inicio { padding-top: 0; }
 }
 @media (max-width: 480px) {
   .segmentado button { padding: 0 10px; font-size: .75rem; }
@@ -533,7 +538,6 @@ html.presentacion .barra-sup .chip-conexion, html.presentacion .barra-sup .btn {
     <a href="#/dashboard/alertas" data-ruta="alertas"><svg class="icono" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5 21 19.5H3z"/><path d="M12 10v4"/><path d="M12 17h.01"/></svg>Alertas</a>
     <a href="#/dashboard/dispositivos" data-ruta="dispositivos"><svg class="icono" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="6" width="16" height="12" rx="2"/><path d="M8 10h3"/><path d="M8 14h8"/><path d="M9 3v3M15 3v3M9 18v3M15 18v3"/></svg>Dispositivos</a>
     <a href="#/dashboard/reportes" data-ruta="reportes"><svg class="icono" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l4 4v14H6z"/><path d="M15 3v4h4"/><path d="M9 12h7M9 16h7"/></svg>Reportes</a>
-    <div class="version" id="version"></div>
   </nav>
 
   <main class="principal" id="main-tablero" tabindex="-1">
@@ -740,6 +744,7 @@ html.presentacion .barra-sup .chip-conexion, html.presentacion .barra-sup .btn {
     </section>
     <section id="imprimible" hidden aria-hidden="true"></section>
   </main>
+  <footer class="pie-tablero" id="version"></footer>
 </div>
 
 <!-- =====================================================================
@@ -814,7 +819,7 @@ html.presentacion .barra-sup .chip-conexion, html.presentacion .barra-sup .btn {
    ===================================================================== */
 const CONFIG = Object.freeze({
   VERSION: '1.0',
-  COMPILADO: '2026-11-25 23:00',          // se actualiza a mano al publicar una versión
+  COMPILADO: '2026-11-25 20:24',          // se actualiza a mano al publicar una versión (hora del entorno de Claude, UTC)
   NUMERO_REGISTRO: '',                    // vacío = no se muestra en ninguna parte
   NOMBRE_LOTE: Object.freeze({ A: 'KD-LOT-A · Hielera', B: 'KD-LOT-B · Ambiente' }),
   MODELO_PLACA: 'ESP-32D de 38 pines',
@@ -1489,7 +1494,7 @@ function actualizarNivelVida(m, c, t) {
   }
 }
 
-// Procesa una lectura ya validada por el analizador. t = { tH, marca }.
+// Procesa una lectura ya revisada por el analizador. t = { tH, marca }.
 function registrarLectura(m, msg, t) {
   const c = m.canales[msg.nodo];
   const N = CONFIG.LECTURAS_PARA_CAMBIO;
@@ -2198,7 +2203,7 @@ function fijarConexion(estado) {
   app.sucio = true;
 }
 
-// ---------- Formas de nivel (SVG propio, sin innerHTML) ----------
+// ---------- Formas de nivel (SVG propio, creado con createElementNS) ----------
 const NS_SVG = 'http://www.w3.org/2000/svg';
 const FORMAS = {
   normal: [['circle', { cx: 12, cy: 12, r: 8 }]],
@@ -2662,7 +2667,7 @@ async function copiarConsola() {
   }
 }
 
-// ---------- Diálogo de confirmación propio (sin confirm()) ----------
+// ---------- Diálogo de confirmación propio (no la ventana nativa del navegador) ----------
 function confirmar(titulo, texto, textoAceptar) {
   return new Promise(function (resolver) {
     const d = $('dialogo');
@@ -3856,11 +3861,15 @@ function pintarAutopruebas() {
    ARRANQUE
    ===================================================================== */
 function iniciar() {
-  $('version').textContent = 'v' + CONFIG.VERSION + ' · compilado ' + CONFIG.COMPILADO;
+  $('version').textContent = 'KAIROS DYNAMICS · v' + CONFIG.VERSION + ' · compilado ' + CONFIG.COMPILADO + ' · ' + CONFIG.LINEA_EVENTO;
   const nombres = almacen.leer('nombres');
   if (nombres && typeof nombres.A === 'string' && typeof nombres.B === 'string') {
     app.nombres = { A: nombres.A.slice(0, 40) || CONFIG.NOMBRE_LOTE.A, B: nombres.B.slice(0, 40) || CONFIG.NOMBRE_LOTE.B };
   }
+  // El menú lateral ocupa el alto que deja la barra superior (cambia si la barra se parte en dos filas).
+  const barra = document.querySelector('.barra-sup');
+  const medirBarra = function () { if (barra.offsetHeight) document.documentElement.style.setProperty('--alto-barra', barra.offsetHeight + 'px'); };
+  if (window.ResizeObserver) new ResizeObserver(medirBarra).observe(barra);
   construirResumen();
   construirDispositivos();
   construirTemperatura();

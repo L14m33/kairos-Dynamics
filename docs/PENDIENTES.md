@@ -1,6 +1,6 @@
 # Pendientes, contradicciones y riesgos
 
-Actualizado: 2026-11-25 (Etapa 3). Regla: si los archivos contradicen `PROMPT_KAIROS.md`, manda el prompt y la diferencia se anota aquí. **Nada de esta lista se corrige en la página**; el equipo lo aclara con el jurado.
+Actualizado: 2026-11-25 (Etapa 5, cierre). Regla: si los archivos contradicen `PROMPT_KAIROS.md`, manda el prompt y la diferencia se anota aquí. **Nada de esta lista se corrige en la página**; el equipo lo aclara con el jurado.
 
 Páginas del informe = número impreso al pie de `KAIROS_DYNAMICS_INFORME.pdf`. Páginas de la convocatoria = página del PDF `CONVOCATORIA.pdf` (no trae numeración impresa).
 
@@ -62,7 +62,23 @@ El PDF del informe se generó el 18 de noviembre de 2026 (metadatos del archivo)
 - **p. 28–29:** el **manual de usuario es obligatorio** para todo prototipo, más manual de instalación o ensamble según el caso; si falta un elemento hay sanción. El prompt no lo pide (ver P4).
 - **p. 41 (rúbrica, Criterio III):** «Demuestra el funcionamiento del prototipo y ejemplos de uso» vale 0–10, y los manuales 0–10.
 
-## 6. Preguntas para el usuario (Etapa 1)
+## 6. Pendientes del equipo antes del viernes (Etapa 5)
+
+- [ ] **Compilar y cargar** los cuatro sketches en Arduino IDE y llenar las pruebas 0 a 0c de `PRUEBAS.md`.
+- [ ] Probar `kairos_dashboard.html` con la placa real en **la laptop de la escuela** (prueba 1). Si el USB falla: usar DEMOSTRACIÓN o «Cargar captura».
+- [ ] **Manual de usuario** (obligatorio, convocatoria p. 28–29; −1 punto por cada falta): revisar `docs/MANUAL_USUARIO.md`, pasarlo a procesador de texto, agregar fotos reales, imprimirlo y engargolarlo con cubiertas transparentes. Decidir si además entregan el manual de instalación o ensamble.
+- [ ] Llenar `NUMERO_REGISTRO` en `CONFIG` (dentro de `kairos_dashboard.html`) cuando lo tengan.
+- [ ] Usar **F11** (pantalla completa) o el modo presentación (tecla P) frente al jurado.
+- [ ] Ensayar el discurso para el jurado: el informe describe otra placa (ESP32-C3) y Wi-Fi/nube; el prototipo real usa dos ESP-32D, ESP-NOW y USB (tabla 1).
+
+## 7. Notas de la verificación (Etapa 5)
+
+- A 1024×768 la recomendación queda debajo de la primera pantalla. El prompt solo exige que quepa a 1366×768; a 1366×633 también cabe.
+- No se probó la impresión en papel ni abrir el CSV en Excel: no hay impresora ni Excel en el entorno de Claude.
+- En la gráfica, el escenario 1 dibuja un marcador rojo en cada lectura de B, porque todas están fuera de rango. Es lo que pide el prompt («un marcador en cada lectura fuera de rango»), aunque se ve cargado.
+- La palabra «inteligente» del subtítulo de la página de inicio viene del texto obligatorio del prompt. No es una de las palabras prohibidas.
+
+## 8. Preguntas de la Etapa 1 (ya respondidas: P1 a P4 confirmadas)
 
 | # | Pregunta | Recomendación |
 | --- | --- | --- |

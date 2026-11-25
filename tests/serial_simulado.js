@@ -125,7 +125,7 @@ function dobleSerial(duracionS) {
   if (DURACION_S >= 150) {
     await esperar(148.5 - 46 - 0.6);
     mensajeSilencio = await pagina.$eval('#resumen-tarjetas article:nth-child(2) .causas', (e) => e.textContent);
-    const recoSilencio = await pagina.$eval('.reco .reco-titulo', (e) => e.textContent);
+    const recoSilencio = await pagina.$eval('#resumen-reco .reco-titulo', (e) => e.textContent);
     comprobar('Tarjeta B: «Nodo B sin datos hace N s» (N ≈ 30)', /Nodo B sin datos hace (2\d|3\d) s/.test(mensajeSilencio), mensajeSilencio);
     comprobar('Recomendación: NO SE PUEDE COMPARAR durante el silencio', recoSilencio === 'NO SE PUEDE COMPARAR', recoSilencio);
     await esperar(DURACION_S - 148.5 + 3);
