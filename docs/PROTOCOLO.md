@@ -73,8 +73,27 @@ ets Jun  8 2016 00:22:57  rst:0x1 (POWERON_RESET),boot:0x13 (SPI_FAST_FLASH_BOOT
 9. Laguna: si entre dos lecturas válidas pasan más de 3 intervalos observados, ese tramo **no se integra** y se suma a «Datos faltantes». Nunca se rellena con una temperatura inventada.
 10. Todo dato serial es no confiable: se muestra con `textContent`, nunca como HTML.
 
-## 5. Compatibilidad
+## 5. Paquete ESP-NOW entre B y A (no lo ve la página)
+
+El Nodo B no manda JSON por radio: manda una estructura fija de 23 bytes (`PaqueteKairos`, `__attribute__((packed))`, idéntica en `nodo_A.ino` y `nodo_B.ino`). El Nodo A la convierte en una línea `reading` con `"via":"espnow"`.
+
+| Campo | Tipo | Significado |
+| --- | --- | --- |
+| `version` | `uint8_t` | 1 |
+| `nodo` | `char` | `'B'` |
+| `ok` | `uint8_t` | 1 = lectura válida |
+| `err` | `uint8_t` | 0 ninguno, 1 `disconnected`, 2 `power_on_85`, 3 `no_sensor` |
+| `tieneRom`, `rom[8]` | `uint8_t` | dirección ROM de la sonda, si existe |
+| `tcCentesimas` | `int16_t` | temperatura × 100 (2 decimales), solo si `ok` = 1 |
+| `seq`, `upMs` | `uint32_t` | contador y `millis()` de la placa B |
+
+- A descarta un paquete de otro tamaño, otra versión u otro nodo.
+- El RSSI sale de `info->rx_ctrl->rssi` y solo existe con el núcleo Arduino-ESP32 3.x (ESP-IDF 5.x).
+- B también imprime su lectura por su propio USB (`"node":"B","via":"local"`), útil para revisar la sonda B conectándola sola.
+- Canal fijo: `CANAL_ESPNOW = 1` en los dos sketches.
+
+## 6. Compatibilidad
 
 - Un cambio que solo **agrega** campos o tipos no cambia `v`.
 - Un cambio que quita o cambia el significado de un campo sube `v` a 2; la página mostrará «versión de protocolo no soportada» en Dispositivos y no usará esas líneas.
-- El sketch `etapa1_nodo_A_json` solo emite `hello` y `reading` con `via:"local"`. `status` y `via:"espnow"` llegan con `nodo_A` (Etapa 3).
+- El sketch `etapa1_nodo_A_json` solo emite `hello` y `reading` con `via:"local"`. `status` y `via:"espnow"` llegan con `nodo_A`.

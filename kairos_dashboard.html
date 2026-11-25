@@ -492,6 +492,46 @@ html.presentacion .principal { padding: 12px 20px 20px; }
     </section>
 
     <!--VISTAS-->
+    <!-- ===================== DISPOSITIVOS ===================== -->
+    <section class="vista" id="vista-dispositivos" aria-labelledby="h-dispositivos" hidden>
+      <div class="fila-titulo"><h1 id="h-dispositivos" tabindex="-1">Dispositivos</h1><span class="meta">Diagnóstico de nodos y conexión. Lo que llega por el puerto se muestra como texto, nunca como HTML.</span></div>
+      <p class="nota-demo" id="nota-demo-disp">Modo demostración: no hay placas conectadas. Las líneas y los valores de esta vista son <strong>simulados</strong>.</p>
+      <div class="rejilla-3">
+        <section class="panel" aria-labelledby="h-nodo-a"><h2 class="titulo-panel" id="h-nodo-a">Nodo A · sonda propia</h2><dl class="kv" id="kv-nodo-A"></dl></section>
+        <section class="panel" aria-labelledby="h-nodo-b"><h2 class="titulo-panel" id="h-nodo-b">Nodo B · por ESP-NOW</h2><dl class="kv" id="kv-nodo-B"></dl></section>
+        <section class="panel" aria-labelledby="h-conexion">
+          <h2 class="titulo-panel" id="h-conexion">Conexión</h2>
+          <dl class="kv" id="kv-conexion"></dl>
+          <div class="controles-grafica" style="margin-top: 12px">
+            <button type="button" class="btn" id="btn-disp-usb">Conectar por USB</button>
+          </div>
+        </section>
+      </div>
+      <section class="panel" style="margin-top: 16px" aria-labelledby="h-captura">
+        <h2 class="titulo-panel" id="h-captura">Reproducir una captura (plan B sin hardware)</h2>
+        <p class="atenuado" style="margin: 0 0 10px">Un archivo .txt o .jsonl con líneas NDJSON (por ejemplo, copiado del Monitor Serie). Pasa por el mismo analizador. Lo reproducido se rotula «Reproducción de archivo», no se guarda y no se mezcla con el registro real.</p>
+        <div class="controles-grafica">
+          <label class="btn" for="archivo-captura">Cargar captura (.txt, .jsonl)</label>
+          <input type="file" id="archivo-captura" accept=".txt,.jsonl,.ndjson,.log,text/plain" class="solo-lector">
+          <label class="solo-lector" for="sel-vel-archivo">Velocidad de reproducción</label>
+          <select class="btn" id="sel-vel-archivo">
+            <option value="1">Velocidad real (×1)</option>
+            <option value="10" selected>Rápida (×10)</option>
+            <option value="60">Muy rápida (×60)</option>
+            <option value="0">Instantánea</option>
+          </select>
+          <button type="button" class="btn" id="btn-detener-archivo" hidden>Detener reproducción</button>
+          <span class="meta" id="archivo-estado" aria-live="polite"></span>
+        </div>
+      </section>
+      <section class="panel" style="margin-top: 16px">
+        <details id="det-consola" open>
+          <summary><span class="titulo-panel" style="margin: 0">Consola de diagnóstico · últimas 50 líneas crudas</span></summary>
+          <div class="controles-grafica" style="margin-top: 8px"><button type="button" class="btn" id="btn-copiar">Copiar</button><span class="meta" id="copiar-estado" aria-live="polite"></span></div>
+          <pre class="consola" id="consola" tabindex="0" aria-label="Últimas líneas recibidas"></pre>
+        </details>
+      </section>
+    </section>
   </main>
 </div>
 
@@ -906,6 +946,130 @@ function crearTransporteDemo(escenarioId, segPorHora) {
     get terminado() { return terminado; },
     get escenario() { return sim.escenario; },
     get simulador() { return sim; }
+  };
+}
+
+// ---------- 4.2 Web Serial (USB de la placa A) ----------
+// La hora la pone la laptop al recibir cada pedazo: el ESP32 no tiene reloj.
+function crearTransporteSerial(puerto, reloj, alDiagnostico) {
+  let alRecibir = function () {};
+  let alPerder = function () {};
+  let activo = false;
+  let lector = null;
+  const divisor = crearDivisorLineas(CONFIG.MAX_LINEA_CARACTERES);
+  const decodificador = new TextDecoder();
+  const tr = {
+    tipo: 'serial',
+    puerto: puerto,
+    abiertoDesde: null,
+    abiertoMarca: null,
+    umbralOpc: { minimoH: 10 / 3600, inicialH: 30 / 3600 },
+    onLine: function (cb) { alRecibir = cb; },
+    onPerdida: function (cb) { alPerder = cb; },
+    ahoraH: reloj,
+    start: async function () {
+      await puerto.open({ baudRate: CONFIG.BAUDIOS });
+      activo = true;
+      tr.abiertoDesde = performance.now();
+      tr.abiertoMarca = Date.now();
+      leer();
+    },
+    stop: async function () {
+      activo = false;
+      try { if (lector) await lector.cancel(); } catch (e) { /* ya estaba cerrado */ }
+      try { await puerto.close(); } catch (e) { /* ya estaba cerrado */ }
+    }
+  };
+  async function leer() {
+    while (activo && puerto.readable) {
+      lector = puerto.readable.getReader();
+      try {
+        for (;;) {
+          const r = await lector.read();
+          if (r.done) break;
+          if (!r.value) continue;
+          const t = { tH: reloj(), marca: Date.now() };
+          const partes = divisor.alimentar(decodificador.decode(r.value, { stream: true }));
+          if (partes.descartadas) alDiagnostico('descartada', partes.descartadas);
+          partes.lineas.forEach(function (l) { alRecibir(l, t); });
+        }
+      } catch (e) {
+        // Errores como BreakError o BufferOverrunError no cierran el puerto:
+        // se vuelve a leer mientras readable exista.
+        alDiagnostico('error', e && e.name ? e.name : 'error de lectura');
+      } finally {
+        try { lector.releaseLock(); } catch (e) { /* nada */ }
+        lector = null;
+      }
+    }
+    if (activo) { activo = false; alPerder(); }   // terminó sin que se pidiera: cable desconectado
+  }
+  return tr;
+}
+
+// ---------- 4.3 Reproducción de un archivo de captura (.txt, .jsonl) ----------
+// Las capturas no traen la hora de la laptop. El tiempo se reconstruye con
+// up_ms de cada nodo: es el reloj del propio nodo que midió. Si up_ms baja
+// (reinicio), se vuelve a anclar al tiempo actual de la reproducción.
+function programarCaptura(texto) {
+  const divisor = crearDivisorLineas(CONFIG.MAX_LINEA_CARACTERES);
+  const partes = divisor.alimentar(texto.endsWith('\n') ? texto : texto + '\n');
+  const anclas = { A: null, B: null };
+  let reloj = 0;
+  const programa = partes.lineas.map(function (linea) {
+    let t = reloj;
+    const limpia = linea.trim();
+    if (limpia.charAt(0) === '{') {
+      try {
+        const o = JSON.parse(limpia);
+        if (o && (o.node === 'A' || o.node === 'B') && Number.isInteger(o.up_ms) && o.type === 'reading') {
+          const a = anclas[o.node];
+          if (!a || o.up_ms < a.up) anclas[o.node] = { up: o.up_ms, t: reloj };
+          const b = anclas[o.node];
+          t = b.t + (o.up_ms - b.up);
+        }
+      } catch (e) { /* línea no válida: la decide el analizador */ }
+    }
+    reloj = Math.max(reloj, t);
+    return { linea: linea, tMs: t };
+  });
+  return { programa: programa, descartadas: partes.descartadas, duracionMs: reloj };
+}
+
+function crearTransporteArchivo(nombre, texto, velocidad) {
+  const cap = programarCaptura(texto);
+  let alRecibir = function () {};
+  let i = 0, corriendo = false, perfAncla = 0, virtualAncla = 0, vel = velocidad, terminado = false;
+  function virtualMs() {
+    if (!corriendo) return virtualAncla;
+    if (!Number.isFinite(vel)) return cap.duracionMs;
+    return Math.min(cap.duracionMs, virtualAncla + (performance.now() - perfAncla) * vel);
+  }
+  return {
+    tipo: 'archivo',
+    nombre: nombre,
+    duracionMs: cap.duracionMs,
+    descartadas: cap.descartadas,
+    umbralOpc: { minimoH: 10 / 3600, inicialH: 30 / 3600 },
+    onLine: function (cb) { alRecibir = cb; },
+    start: function () { perfAncla = performance.now(); corriendo = true; },
+    stop: function () { virtualAncla = virtualMs(); corriendo = false; },
+    ahoraH: function () { return virtualMs() / 3600000; },
+    fijarVelocidad: function (v) { virtualAncla = virtualMs(); perfAncla = performance.now(); vel = v; },
+    tick: function () {
+      const limite = virtualMs();
+      let n = 0;
+      // Como máximo 3000 líneas por cuadro para no congelar la página.
+      while (i < cap.programa.length && cap.programa[i].tMs <= limite && n < 3000) {
+        const p = cap.programa[i];
+        alRecibir(p.linea, { tH: p.tMs / 3600000, marca: null });
+        i += 1; n += 1;
+      }
+      if (i >= cap.programa.length && !terminado) { terminado = true; corriendo = false; virtualAncla = cap.duracionMs; }
+    },
+    get progreso() { return cap.programa.length ? i / cap.programa.length : 1; },
+    get terminado() { return terminado; },
+    get corriendo() { return corriendo; }
   };
 }
 
@@ -1372,6 +1536,8 @@ const almacen = (function () {
   };
 })();
 /*ALMACEN-EXTRA*/
+function cargarSesionReal() { return null; }      // Etapa 4: persistencia
+function guardarSesionReal() { /* Etapa 4 */ }
 
 /* =====================================================================
    8. INTERFAZ: rutas, vistas y componentes
@@ -1404,7 +1570,9 @@ const app = {
   hello: null, status: null,
   vista: null,
   sucio: true, ultimoRender: 0,
-  relojReal: null               // { origenPerf, baseH } para el modo real
+  relojReal: null,              // { origenPerf, baseH } para el modo real
+  puertoConocido: null,         // último puerto autorizado (para «Reconectar»)
+  versionPintada: -1
 };
 
 // ---------- Tiempo ----------
@@ -1512,18 +1680,143 @@ function cambiarModo(modo) {
   render(true);
 }
 
-/*MODO-REAL*/
 const UMBRAL_REAL = { minimoH: 10 / 3600, inicialH: 30 / 3600 };
+
+function nuevoMonitorReal() {
+  app.relojReal = { origenPerf: performance.now(), baseH: 0 };
+  return crearMonitor({ modo: 'real', params: app.params, limites: app.limites, e0H: { A: 0, B: 0 }, umbralOpc: UMBRAL_REAL });
+}
+
+// Al pasar a SENSORES REALES se deja de simular y se usa el registro real
+// (el que haya en memoria o, desde la Etapa 4, el guardado en localStorage).
 function entrarModoReal() {
-  if (!app.monitorReal) {
-    app.relojReal = { origenPerf: performance.now(), baseH: 0 };
-    app.monitorReal = crearMonitor({ modo: 'real', params: app.params, limites: app.limites, e0H: { A: 0, B: 0 }, umbralOpc: UMBRAL_REAL });
-  }
+  if (!app.monitorReal) app.monitorReal = cargarSesionReal() || nuevoMonitorReal();
   app.monitor = app.monitorReal;
   reiniciarContadores();
   fijarConexion(('serial' in navigator) ? 'DESCONECTADO' : 'SIN_WEBSERIAL');
 }
-function salirModoReal() { /* Etapa 3: cerrar el puerto */ }
+
+// Al volver a DEMOSTRACIÓN se cierra el puerto: lo registrado se conserva y
+// nada de lo que llegue por USB se mezcla con la simulación.
+function salirModoReal() {
+  const tr = app.transporte;
+  app.transporte = null;
+  if (tr && tr.tipo === 'serial') tr.stop();
+  if (tr && tr.tipo === 'archivo') tr.stop();
+  guardarSesionReal(true);
+}
+
+function hex4(n) { return typeof n === 'number' ? n.toString(16).toUpperCase().padStart(4, '0') : '????'; }
+
+function diagnosticoSerial(tipo, dato) {
+  if (tipo === 'descartada') { app.contadores.errores += dato; agregarConsola('(línea de más de 4 KB sin salto: descartada)', 'rech', 'descartada'); }
+  else agregarConsola('(error de lectura del puerto: ' + dato + ')', 'rech', 'lectura');
+  app.sucio = true;
+}
+
+async function conectarUSB() {
+  if (!('serial' in navigator) || app.modo !== 'real') return;
+  fijarConexion('CONECTANDO');
+  render(true);
+  let puerto;
+  try {
+    puerto = await navigator.serial.requestPort();
+  } catch (e) {
+    // Si la persona cierra el selector sin elegir (NotFoundError) no es un error.
+    fijarConexion('DESCONECTADO');
+    if (e && e.name !== 'NotFoundError') agregarConsola('(no se pudo abrir el selector de puertos: ' + e.name + ')', 'rech', 'selector');
+    return;
+  }
+  await abrirPuerto(puerto);
+}
+
+async function abrirPuerto(puerto) {
+  if (app.modo !== 'real') return;
+  if (app.transporte && app.transporte.tipo === 'archivo') detenerArchivo();
+  app.monitor = app.monitorReal;
+  fijarConexion('CONECTANDO');
+  const tr = crearTransporteSerial(puerto, ahoraRealH, diagnosticoSerial);
+  tr.onLine(procesarLinea);
+  tr.onPerdida(conexionPerdida);
+  try {
+    await tr.start();
+  } catch (e) {
+    fijarConexion(app.puertoConocido ? 'PERDIDA' : 'DESCONECTADO');
+    agregarEvento(app.monitor, tiempoActual(), { tipo: 'Conexión USB', texto: 'No se pudo abrir el puerto USB (' + (e && e.name ? e.name : 'error') + ')',
+      recomendacion: 'Cerrar el Monitor Serie de Arduino u otro programa que use el puerto y volver a intentar.' });
+    return;
+  }
+  const info = puerto.getInfo ? puerto.getInfo() : {};
+  app.vidPid = hex4(info.usbVendorId) + ':' + hex4(info.usbProductId);
+  app.puertoConocido = puerto;
+  app.transporte = tr;
+  reiniciarContadores();
+  fijarConexion('ESPERANDO');
+  agregarEvento(app.monitor, tiempoActual(), { tipo: 'Conexión USB', texto: 'USB conectado (VID:PID ' + app.vidPid + ')',
+    recomendacion: 'La placa suele reiniciarse al abrir el puerto: los primeros segundos pueden no traer datos.' });
+}
+
+function conexionPerdida() {
+  if (!app.transporte || app.transporte.tipo !== 'serial') return;
+  app.transporte = null;
+  fijarConexion('PERDIDA');
+  agregarEvento(app.monitor, tiempoActual(), { tipo: 'Conexión USB', texto: 'Se perdió la conexión USB',
+    recomendacion: 'Revisar el cable y presionar «Reconectar». Lo registrado se conserva.', activa: true });
+  guardarSesionReal(true);
+}
+
+async function desconectarUSB() {
+  const tr = app.transporte;
+  if (!tr || tr.tipo !== 'serial') return;
+  app.transporte = null;
+  await tr.stop();
+  fijarConexion('DESCONECTADO');
+  agregarEvento(app.monitor, tiempoActual(), { tipo: 'Conexión USB', texto: 'USB desconectado por la persona usuaria' });
+  guardarSesionReal(true);
+}
+
+// Botón del chip de conexión: su acción depende del estado.
+function accionChip() {
+  if (app.conexion === 'DESCONECTADO') { if (app.puertoConocido) abrirPuerto(app.puertoConocido); else conectarUSB(); }
+  else if (app.conexion === 'PERDIDA') { if (app.puertoConocido) abrirPuerto(app.puertoConocido); else conectarUSB(); }
+  else if (app.conexion === 'CONECTADO' || app.conexion === 'ESPERANDO') desconectarUSB();
+  else if (app.conexion === 'ARCHIVO') detenerArchivo();
+}
+
+// ---------- Reproducción de archivo (plan B sin hardware) ----------
+const LIMITE_ARCHIVO_BYTES = 10 * 1024 * 1024;
+async function cargarCaptura(archivo) {
+  if (!archivo) return;
+  if (archivo.size > LIMITE_ARCHIVO_BYTES) { $('archivo-estado').textContent = 'El archivo pasa de 10 MB: elija una captura más corta.'; return; }
+  let texto;
+  try { texto = await archivo.text(); } catch (e) { $('archivo-estado').textContent = 'No se pudo leer el archivo.'; return; }
+  if (app.transporte && app.transporte.tipo === 'serial') { $('archivo-estado').textContent = 'Desconecte el USB antes de reproducir un archivo.'; return; }
+  if (app.modo !== 'real') { cambiarModo('real'); }
+  if (app.transporte) app.transporte.stop();
+  const vel = Number($('sel-vel-archivo').value);
+  const tr = crearTransporteArchivo(archivo.name.slice(0, 60), texto, vel > 0 ? vel : Infinity);
+  // Un monitor aparte: lo reproducido NO se mezcla con el registro real ni se guarda.
+  app.monitor = crearMonitor({ modo: 'archivo', params: app.params, limites: app.limites, e0H: { A: 0, B: 0 }, umbralOpc: tr.umbralOpc });
+  reiniciarContadores();
+  if (tr.descartadas) app.contadores.errores += tr.descartadas;
+  app.transporte = tr;
+  tr.onLine(procesarLinea);
+  tr.start();
+  fijarConexion('ARCHIVO');
+  $('archivo-estado').textContent = 'Reproduciendo «' + tr.nombre + '» (' + formatoT(tr.duracionMs / 3600000, true) + ' de datos).';
+  app.sucio = true;
+}
+
+function detenerArchivo() {
+  if (!app.transporte || app.transporte.tipo !== 'archivo') return;
+  app.transporte.stop();
+  app.transporte = null;
+  app.monitor = app.monitorReal;
+  reiniciarContadores();
+  fijarConexion(('serial' in navigator) ? 'DESCONECTADO' : 'SIN_WEBSERIAL');
+  $('archivo-estado').textContent = 'Reproducción detenida. Se volvió al registro real.';
+  app.sucio = true;
+}
 
 function fijarConexion(estado) {
   app.conexion = estado;
@@ -1876,6 +2169,124 @@ function dibujarIconoReproducir(svg, corriendo) {
   svg.appendChild(p);
 }
 
+// ---------- Vista Dispositivos ----------
+const disp = { filas: {}, consola: [] };
+
+// Crea una lista de definición con claves fijas; luego solo cambian los textos.
+function crearKV(dl, claves) {
+  const filas = {};
+  claves.forEach(function (c) {
+    const dt = crear('dt', '', c[1]);
+    const dd = crear('dd', c[2] || '');
+    dl.append(dt, dd);
+    filas[c[0]] = dd;
+  });
+  return filas;
+}
+
+function construirDispositivos() {
+  const nodo = [['estado', 'Estado'], ['placa', 'Placa'], ['fw', 'Firmware'], ['sensor', 'ID de sonda', 'mono'], ['ultima', 'Última lectura'],
+    ['intervalo', 'Intervalo observado'], ['lecturas', 'Lecturas recibidas'], ['perdidos', 'Paquetes perdidos'], ['reinicios', 'Reinicios detectados'], ['via', 'Vía · RSSI']];
+  disp.filas.A = crearKV($('kv-nodo-A'), nodo);
+  disp.filas.B = crearKV($('kv-nodo-B'), nodo.concat([['par', 'Según el Nodo A']]));
+  disp.filas.con = crearKV($('kv-conexion'), [['transporte', 'Transporte'], ['vidpid', 'VID:PID', 'mono'], ['baudios', 'Baudios'], ['desde', 'Abierto desde'],
+    ['lineas', 'Líneas recibidas'], ['ignoradas', 'Líneas ignoradas'], ['errores', 'Errores de análisis'], ['rango', 'Fuera de −10 a +85 °C'], ['almacen', 'Almacenamiento']]);
+  const pre = $('consola');
+  for (let i = 0; i < CONFIG.MAX_LINEAS_CONSOLA; i += 1) {
+    const sp = crear('span');
+    sp.hidden = true;
+    pre.appendChild(sp);
+    disp.consola.push(sp);
+  }
+}
+
+function fijarTexto(el, t) { if (el.textContent !== t) el.textContent = t; }
+
+function textoIntervalo(c) {
+  if (c.ei.intervalos.length === 0) return '—';
+  const h = medianaDe(c.ei.intervalos.slice(-10));
+  return h * 3600 < 120 ? formatoNumero(h * 3600, 1) + ' s' : formatoNumero(h * 60, 1) + ' min';
+}
+
+function renderDispositivos() {
+  const m = app.monitor;
+  const o = tipoOrigen();
+  const ahora = tiempoActual();
+  $('nota-demo-disp').hidden = o !== 'demo';
+  ['A', 'B'].forEach(function (id) {
+    const c = m.canales[id], f = disp.filas[id];
+    const vm = vistaCanal(m, id, ahora.tH);
+    let estado = 'Sin lecturas';
+    if (c.lecturas) {
+      if (c.silencioActivo || (c.ultimaLecturaH !== null && vm.sinDatos && c.fallasSeguidas < CONFIG.LECTURAS_PARA_CAMBIO)) estado = 'Sin datos ' + (o === 'demo' ? 'desde ' + formatoT(c.ultimaLecturaH, false) : 'hace ' + textoDuracion(ahora.tH - c.ultimaLecturaH));
+      else if (c.fallasSeguidas >= CONFIG.LECTURAS_PARA_CAMBIO) estado = 'Falla de sonda: ' + TEXTO_ERROR[c.ultimoErr || 'desconocido'];
+      else estado = 'Recibiendo';
+    }
+    fijarTexto(f.estado, estado);
+    f.estado.style.color = estado === 'Recibiendo' ? 'var(--ok)' : (estado === 'Sin lecturas' ? 'var(--ink-dim)' : 'var(--nodata)');
+    fijarTexto(f.placa, CONFIG.MODELO_PLACA + (o === 'demo' ? ' (simulada)' : ''));
+    fijarTexto(f.fw, id === 'A' ? (c.fw || '— (aún no llega hello)') : '— (B no envía hello)');
+    fijarTexto(f.sensor, c.sensor || (o === 'demo' ? '— (sonda simulada)' : '—'));
+    let ultima = '—';
+    if (c.ultimaLecturaH !== null) ultima = o === 'demo' ? formatoT(c.ultimaLecturaH, false) : (o === 'archivo' ? formatoT(c.ultimaLecturaH, true) : 'hace ' + textoDuracion(ahora.tH - c.ultimaLecturaH));
+    fijarTexto(f.ultima, ultima);
+    fijarTexto(f.intervalo, textoIntervalo(c) + (o === 'demo' && c.ei.intervalos.length ? ' simulados' : ''));
+    fijarTexto(f.lecturas, String(c.lecturas));
+    fijarTexto(f.perdidos, String(c.perdidos));
+    fijarTexto(f.reinicios, String(c.reinicios));
+    fijarTexto(f.via, (c.via || '—') + ' · ' + (c.rssi !== null ? c.rssi + ' dBm' : '—'));
+    if (id === 'B') {
+      const st = app.status;
+      fijarTexto(f.par, st && st.edadParMs !== null ? 'último paquete hace ' + textoDuracion(st.edadParMs / 3600000) : (st ? 'aún no recibe paquetes de B' : '— (sin status)'));
+    }
+  });
+  const fc = disp.filas.con;
+  const tr = app.transporte;
+  fijarTexto(fc.transporte, o === 'demo' ? 'Demostración (simulada)' : (tr && tr.tipo === 'archivo' ? 'Archivo: ' + tr.nombre : (tr && tr.tipo === 'serial' ? 'USB (Web Serial)' : 'USB (sin conectar)')));
+  fijarTexto(fc.vidpid, o === 'real' && app.vidPid ? app.vidPid : '—');
+  fijarTexto(fc.baudios, o === 'real' ? String(CONFIG.BAUDIOS) : '—');
+  fijarTexto(fc.desde, tr && tr.abiertoMarca ? horaLocal(tr.abiertoMarca, true) : '—');
+  fijarTexto(fc.lineas, String(app.contadores.lineas));
+  fijarTexto(fc.ignoradas, String(app.contadores.ignoradas));
+  fijarTexto(fc.errores, String(app.contadores.errores));
+  fijarTexto(fc.rango, String(app.contadores.fueraRangoSonda));
+  fijarTexto(fc.almacen, almacen.disponible ? 'localStorage disponible' : 'no disponible');
+
+  const btn = $('btn-disp-usb');
+  btn.hidden = app.modo !== 'real' || !('serial' in navigator) || app.conexion === 'ARCHIVO';
+  fijarTexto(btn, $('btn-chip').textContent || 'Conectar por USB');
+  $('btn-detener-archivo').hidden = !(tr && tr.tipo === 'archivo');
+
+  // Consola: siempre las mismas 50 etiquetas; solo cambia su texto.
+  const lineas = app.consola;
+  const prefijo = o === 'demo' ? 'SIM · ' : '';
+  disp.consola.forEach(function (sp, i) {
+    const l = lineas[i];
+    sp.hidden = !l;
+    if (!l) return;
+    const t = prefijo + l.texto + (l.motivo ? '   ← ' + (l.clase === 'ign' ? 'ignorada: ' : '') + l.motivo : '') + '\n';
+    fijarTexto(sp, t);
+    const clase = l.clase === 'ign' ? 'ign' : (l.clase === 'rech' ? 'rech' : '');
+    if (sp.className !== clase) sp.className = clase;
+  });
+}
+
+async function copiarConsola() {
+  const texto = app.consola.map(function (l) { return l.texto; }).join('\n');
+  try {
+    await navigator.clipboard.writeText(texto);
+    $('copiar-estado').textContent = 'Copiadas ' + app.consola.length + ' líneas.';
+  } catch (e) {
+    // Sin permiso de portapapeles: se selecciona el texto para copiarlo con Ctrl+C.
+    const rango = document.createRange();
+    rango.selectNodeContents($('consola'));
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(rango);
+    $('copiar-estado').textContent = 'Texto seleccionado: presione Ctrl+C para copiarlo.';
+  }
+}
+
 // ---------- Barra superior ----------
 const TEXTO_CONEXION = {
   DEMO: 'Modo demostración · sin hardware',
@@ -1901,13 +2312,14 @@ function renderBarraSup() {
   chip.setAttribute('data-estado', app.conexion);
   let texto = TEXTO_CONEXION[app.conexion] || '';
   if (app.conexion === 'CONECTADO' && app.vidPid) texto = 'USB conectado · VID:PID ' + app.vidPid;
+  if (app.conexion === 'ARCHIVO' && app.transporte && app.transporte.terminado) texto = 'Archivo reproducido completo · sin hardware';
   if (app.conexion === 'ESPERANDO' && app.transporte && app.transporte.abiertoDesde && performance.now() - app.transporte.abiertoDesde > 10000) {
     texto = 'USB conectado · sin datos del Nodo A: revise el firmware y 115200 baudios';
   }
   if ($('chip-texto').textContent !== texto) $('chip-texto').textContent = texto;
   const accion = $('btn-chip');
   let etiqueta = '';
-  if (app.conexion === 'DESCONECTADO') etiqueta = 'Conectar por USB';
+  if (app.conexion === 'DESCONECTADO') etiqueta = app.puertoConocido ? 'Reconectar' : 'Conectar por USB';
   if (app.conexion === 'PERDIDA') etiqueta = 'Reconectar';
   if (app.conexion === 'CONECTADO' || app.conexion === 'ESPERANDO') etiqueta = 'Desconectar';
   if (app.conexion === 'ARCHIVO') etiqueta = 'Detener';
@@ -1921,6 +2333,7 @@ function render(forzar) {
   renderBarraSup();
   $('aviso-almacen').hidden = almacen.disponible || app.modo !== 'real';
   if (app.vista === 'resumen') renderResumen();
+  if (app.vista === 'dispositivos') renderDispositivos();
   /*RENDER-VISTAS*/
   app.sucio = false;
   app.ultimoRender = performance.now();
@@ -2060,6 +2473,24 @@ function enlazarInterfaz() {
     }
     if (tecla === 'r') { e.preventDefault(); iniciarDemo(app.escenarioId); }
   });
+  $('btn-chip').addEventListener('click', accionChip);
+  $('btn-disp-usb').addEventListener('click', accionChip);
+  $('btn-copiar').addEventListener('click', copiarConsola);
+  $('archivo-captura').addEventListener('change', function (e) { cargarCaptura(e.target.files[0]); e.target.value = ''; });
+  $('sel-vel-archivo').addEventListener('change', function (e) {
+    const v = Number(e.target.value);
+    if (app.transporte && app.transporte.tipo === 'archivo') app.transporte.fijarVelocidad(v > 0 ? v : Infinity);
+  });
+  $('btn-detener-archivo').addEventListener('click', detenerArchivo);
+  if ('serial' in navigator) {
+    // Un puerto ya autorizado (getPorts) solo habilita «Reconectar»; nunca cambia de modo.
+    try {
+      navigator.serial.getPorts().then(function (puertos) { if (puertos.length && !app.puertoConocido) { app.puertoConocido = puertos[0]; app.sucio = true; } }).catch(function () {});
+    } catch (e) { /* desde file:// puede no estar permitido */ }
+    navigator.serial.addEventListener('disconnect', function (e) {
+      if (app.transporte && app.transporte.tipo === 'serial' && e.target === app.transporte.puerto) conexionPerdida();
+    });
+  }
   /*ENLACES-EXTRA*/
 }
 
@@ -2579,6 +3010,7 @@ function iniciar() {
     app.nombres = { A: nombres.A.slice(0, 40) || CONFIG.NOMBRE_LOTE.A, B: nombres.B.slice(0, 40) || CONFIG.NOMBRE_LOTE.B };
   }
   construirResumen();
+  construirDispositivos();
   /*CONSTRUIR-EXTRA*/
   enlazarInterfaz();
   iniciarDemo(1);                 // cada vez que se abre la página arranca en DEMOSTRACIÓN

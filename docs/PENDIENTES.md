@@ -1,6 +1,6 @@
 # Pendientes, contradicciones y riesgos
 
-Actualizado: 2026-11-25 (Etapa 1). Regla: si los archivos contradicen `PROMPT_KAIROS.md`, manda el prompt y la diferencia se anota aquí. **Nada de esta lista se corrige en la página**; el equipo lo aclara con el jurado.
+Actualizado: 2026-11-25 (Etapa 3). Regla: si los archivos contradicen `PROMPT_KAIROS.md`, manda el prompt y la diferencia se anota aquí. **Nada de esta lista se corrige en la página**; el equipo lo aclara con el jurado.
 
 Páginas del informe = número impreso al pie de `KAIROS_DYNAMICS_INFORME.pdf`. Páginas de la convocatoria = página del PDF `CONVOCATORIA.pdf` (no trae numeración impresa).
 
@@ -47,7 +47,9 @@ El PDF del informe se generó el 18 de noviembre de 2026 (metadatos del archivo)
 | Web Serial con la placa real en la laptop de la escuela (Chrome/Edge ≥ 89, driver, políticas que bloqueen el puerto serie o `file://`) | No probado | Prueba 1 de `PRUEBAS.md` **hoy o mañana**. Plan B: «Cargar captura (.jsonl)» y la demostración. |
 | Abrir el puerto reinicia la placa y llegan 2–3 s de texto de arranque | Supuesto frecuente | La página lo tolera (`ESPERANDO`). Verificar en la prueba 1. |
 | ESP-NOW: mismo canal en A y B, alcance e interferencia en el auditorio | No probado | Pruebas 2 y 5. |
-| Firmware no compilado con el núcleo ESP32 real | No probado | Solo se compiló contra cabeceras simuladas en la PC (ver P3). |
+| Firmware no compilado con el núcleo ESP32 real | No probado | El entorno de Claude bloquea `downloads.arduino.cc`, `github.com` y `dl.espressif.com`: no se pudo instalar `arduino-cli` (P3). Los cuatro sketches compilan con g++ contra cabeceras simuladas (`tests/firmware_simulado/compilar.sh`), con las firmas reales de `esp_now.h` (IDF 4.4.7, 5.1.4, 5.3.1, 5.4 y 5.5). **El equipo debe compilar en Arduino IDE hoy.** |
+| MAC de la placa A en `nodo_B.ino` | Pendiente del equipo | Sin copiarla, B imprime un aviso y sus paquetes no llegan a A. |
+| Canal de ESP-NOW | Supuesto | Fijo en 1 en los dos sketches; si hay mucha interferencia en el auditorio se puede cambiar a 6 u 11, **en ambos**. |
 | Pantalla de 1366×768 con Chrome y barra de tareas: unos 630 px de alto útiles | Supuesto | El Resumen se diseña para ese alto; aun así, usar **F11** el día del evento. |
 | Batería de la laptop: la convocatoria pide llevar extensión si se necesita corriente (p. 35) | No verificado | Llevar extensión y cargador. |
 | La versión de Chrome/Edge de la laptop puede ser antigua o administrada | No verificado | Revisar `chrome://version` en la prueba 1. |
